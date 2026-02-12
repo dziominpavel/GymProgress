@@ -1,6 +1,7 @@
 package com.example.gymprogress.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -30,6 +31,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -48,9 +50,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.example.gymprogress.data.Exercise
 import com.example.gymprogress.data.MuscleGroup
+import com.example.gymprogress.ui.components.MuscleGroupIcon
+import com.example.gymprogress.ui.theme.CardShape
+import com.example.gymprogress.ui.theme.CardShapeSmall
+import com.example.gymprogress.ui.theme.FabShape
+import com.example.gymprogress.ui.theme.Spacing
+import com.example.gymprogress.ui.theme.Volt
 
 @Composable
 fun ExercisesScreen(
@@ -67,11 +76,14 @@ fun ExercisesScreen(
 
     Scaffold(
         modifier = modifier,
+        containerColor = MaterialTheme.colorScheme.background,
         floatingActionButton = {
             FloatingActionButton(
                 onClick = { showAddDialog = true },
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary
+                containerColor = Volt,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
+                shape = FabShape,
+                elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 6.dp)
             ) {
                 Icon(Icons.Default.Add, contentDescription = "Добавить упражнение")
             }
@@ -81,50 +93,72 @@ fun ExercisesScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .padding(horizontal = 16.dp)
+                .padding(horizontal = Spacing.md)
         ) {
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(Spacing.md))
             Text(
-                text = "Упражнения",
+                text = "УПРАЖНЕНИЯ",
                 style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold,
+                fontWeight = FontWeight.Black,
                 color = MaterialTheme.colorScheme.onBackground
             )
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(Spacing.xxs))
+            Box(
+                modifier = Modifier
+                    .width(40.dp)
+                    .height(3.dp)
+                    .clip(RoundedCornerShape(2.dp))
+                    .background(Volt)
+            )
+            Spacer(modifier = Modifier.height(Spacing.xs))
             Text(
                 text = "${exercises.size} упражнений в ${grouped.size} группах",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(Spacing.md))
 
             if (exercises.isEmpty()) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
                 ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(
-                            "🏋️",
-                            style = MaterialTheme.typography.displayLarge
-                        )
-                        Spacer(modifier = Modifier.height(12.dp))
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.padding(horizontal = Spacing.xxl)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(80.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(MaterialTheme.colorScheme.surfaceVariant),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                "🏋️",
+                                style = MaterialTheme.typography.displaySmall
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(Spacing.lg))
                         Text(
                             "Упражнений пока нет",
                             style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            textAlign = TextAlign.Center
                         )
-                        Spacer(modifier = Modifier.height(4.dp))
+                        Spacer(modifier = Modifier.height(Spacing.xxs))
                         Text(
                             "Нажмите + чтобы создать первое",
                             style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center
                         )
                     }
                 }
             } else {
                 LazyColumn(
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    verticalArrangement = Arrangement.spacedBy(Spacing.xs)
                 ) {
                     grouped.forEach { (group, groupExercises) ->
                         val displayName = MuscleGroup.entries
@@ -133,6 +167,7 @@ fun ExercisesScreen(
 
                         item(key = "header_$group") {
                             MuscleGroupHeader(
+                                muscleGroup = group,
                                 name = displayName,
                                 count = groupExercises.size,
                                 isExpanded = isExpanded,
@@ -190,6 +225,7 @@ fun ExercisesScreen(
 
 @Composable
 private fun MuscleGroupHeader(
+    muscleGroup: String,
     name: String,
     count: Int,
     isExpanded: Boolean,
@@ -198,37 +234,65 @@ private fun MuscleGroupHeader(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
+            .clip(CardShape)
             .clickable(onClick = onClick),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer
+            containerColor = MaterialTheme.colorScheme.surface
         ),
-        shape = RoundedCornerShape(16.dp)
+        shape = CardShape
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 16.dp),
+                .padding(horizontal = Spacing.sm, vertical = Spacing.sm),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            Box(
+                modifier = Modifier
+                    .size(56.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .border(
+                        width = 1.5.dp,
+                        color = Volt.copy(alpha = 0.3f),
+                        shape = RoundedCornerShape(8.dp)
+                    )
+            ) {
+                MuscleGroupIcon(
+                    muscleGroup = muscleGroup,
+                    size = 56.dp,
+                    backgroundColor = MaterialTheme.colorScheme.surfaceVariant
+                )
+            }
+            Spacer(modifier = Modifier.width(Spacing.sm))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = name,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                    color = MaterialTheme.colorScheme.onSurface
                 )
-                Text(
-                    text = "$count упр.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
-                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(Spacing.xxs))
+                            .background(Volt.copy(alpha = 0.15f))
+                            .padding(horizontal = Spacing.xs, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = "$count упр.",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = Volt
+                        )
+                    }
+                }
             }
             Icon(
                 imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp
                 else Icons.Default.KeyboardArrowDown,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.onPrimaryContainer
+                tint = Volt
             )
         }
     }
@@ -239,28 +303,29 @@ private fun ExerciseItem(exercise: Exercise, onDelete: () -> Unit) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(start = 12.dp),
+            .padding(start = Spacing.sm),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant
         ),
-        shape = RoundedCornerShape(12.dp)
+        shape = CardShapeSmall
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
+                .padding(horizontal = Spacing.md, vertical = Spacing.sm),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
                 modifier = Modifier
                     .size(8.dp)
                     .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primary)
+                    .background(Volt)
             )
-            Spacer(modifier = Modifier.width(12.dp))
+            Spacer(modifier = Modifier.width(Spacing.sm))
             Text(
                 text = exercise.name,
                 style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Medium,
                 modifier = Modifier.weight(1f),
                 color = MaterialTheme.colorScheme.onSurface
             )
@@ -271,7 +336,7 @@ private fun ExerciseItem(exercise: Exercise, onDelete: () -> Unit) {
                 Icon(
                     Icons.Default.Delete,
                     contentDescription = "Удалить",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
                     modifier = Modifier.size(18.dp)
                 )
             }

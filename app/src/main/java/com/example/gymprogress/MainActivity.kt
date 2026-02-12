@@ -10,7 +10,9 @@ import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteDefaults
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -21,6 +23,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontWeight
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.gymprogress.ui.screens.AddEntryDialog
 import com.example.gymprogress.ui.screens.ExercisesScreen
@@ -62,12 +65,22 @@ fun GymProgressApp(viewModel: WorkoutViewModel = viewModel()) {
                             contentDescription = it.label
                         )
                     },
-                    label = { Text(it.label) },
+                    label = {
+                        Text(
+                            it.label,
+                            fontWeight = if (it == currentDestination) FontWeight.Bold
+                            else FontWeight.Normal
+                        )
+                    },
                     selected = it == currentDestination,
                     onClick = { currentDestination = it }
                 )
             }
-        }
+        },
+        navigationSuiteColors = NavigationSuiteDefaults.colors(
+            navigationBarContainerColor = MaterialTheme.colorScheme.surface,
+            navigationBarContentColor = MaterialTheme.colorScheme.onSurface
+        )
     ) {
         when (currentDestination) {
             AppDestinations.JOURNAL -> {

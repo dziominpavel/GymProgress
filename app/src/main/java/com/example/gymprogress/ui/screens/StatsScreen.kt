@@ -1,6 +1,7 @@
 package com.example.gymprogress.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -25,6 +26,7 @@ import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -38,6 +40,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.example.gymprogress.data.WorkoutEntry
+import com.example.gymprogress.ui.theme.CardShape
+import com.example.gymprogress.ui.theme.CardShapeSmall
+import com.example.gymprogress.ui.theme.Spacing
+import com.example.gymprogress.ui.theme.TextFieldShape
+import com.example.gymprogress.ui.theme.Volt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -48,38 +55,63 @@ fun StatsScreen(
     onExerciseSelected: (String?) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    Scaffold(
+        modifier = modifier,
+        containerColor = MaterialTheme.colorScheme.background
+    ) { innerPadding ->
     Column(
-        modifier = modifier
+        modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 16.dp)
+            .padding(innerPadding)
+            .padding(horizontal = Spacing.md)
     ) {
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(Spacing.md))
         Text(
-            text = "Прогресс",
+            text = "ПРОГРЕСС",
             style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Bold,
+            fontWeight = FontWeight.Black,
             color = MaterialTheme.colorScheme.onBackground
         )
-        Spacer(modifier = Modifier.height(4.dp))
+        Spacer(modifier = Modifier.height(Spacing.xxs))
+        Box(
+            modifier = Modifier
+                .width(40.dp)
+                .height(3.dp)
+                .clip(RoundedCornerShape(2.dp))
+                .background(Volt)
+        )
+        Spacer(modifier = Modifier.height(Spacing.xs))
         Text(
             text = "Отслеживайте свои результаты",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
 
-        Spacer(modifier = Modifier.height(20.dp))
+        Spacer(modifier = Modifier.height(Spacing.lg))
 
         if (exerciseNames.isEmpty()) {
             Box(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
             ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("📊", style = MaterialTheme.typography.displayLarge)
-                    Spacer(modifier = Modifier.height(12.dp))
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.padding(horizontal = Spacing.xxl)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(80.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("📊", style = MaterialTheme.typography.displaySmall)
+                    }
+                    Spacer(modifier = Modifier.height(Spacing.lg))
                     Text(
                         "Добавьте записи в журнал,\nчтобы отслеживать прогресс",
                         style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Medium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center
                     )
@@ -98,7 +130,7 @@ fun StatsScreen(
                     readOnly = true,
                     label = { Text("Выберите упражнение") },
                     trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-                    shape = RoundedCornerShape(12.dp),
+                    shape = TextFieldShape,
                     modifier = Modifier
                         .fillMaxWidth()
                         .menuAnchor(MenuAnchorType.PrimaryNotEditable)
@@ -132,12 +164,13 @@ fun StatsScreen(
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
                 ) {
                     StatCard(
                         emoji = "🏆",
                         title = "Макс. вес",
                         value = "$maxWeight кг",
+                        isHighlight = true,
                         modifier = Modifier.weight(1f)
                     )
                     StatCard(
@@ -154,32 +187,33 @@ fun StatsScreen(
                     )
                 }
 
-                Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(Spacing.xl))
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(
                         modifier = Modifier
-                            .size(4.dp, 20.dp)
+                            .size(4.dp, 24.dp)
                             .clip(RoundedCornerShape(2.dp))
-                            .background(MaterialTheme.colorScheme.primary)
+                            .background(Volt)
                     )
-                    Spacer(modifier = Modifier.width(10.dp))
+                    Spacer(modifier = Modifier.width(Spacing.sm))
                     Text(
                         text = "История",
                         style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(Spacing.sm))
 
                 LazyColumn(
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    verticalArrangement = Arrangement.spacedBy(Spacing.xs)
                 ) {
                     items(entriesForExercise) { entry ->
                         HistoryRow(entry = entry, maxWeight = maxWeight)
                     }
-                    item { Spacer(modifier = Modifier.height(16.dp)) }
+                    item { Spacer(modifier = Modifier.height(Spacing.md)) }
                 }
             } else if (selectedExercise != null) {
                 Box(
@@ -188,11 +222,13 @@ fun StatsScreen(
                 ) {
                     Text(
                         "Нет данных для этого упражнения",
+                        style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
         }
+    }
     }
 }
 
@@ -201,33 +237,45 @@ private fun StatCard(
     emoji: String,
     title: String,
     value: String,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    isHighlight: Boolean = false
 ) {
     Card(
-        modifier = modifier,
+        modifier = modifier
+            .then(
+                if (isHighlight) Modifier.border(
+                    width = 1.5.dp,
+                    color = Volt.copy(alpha = 0.4f),
+                    shape = CardShape
+                ) else Modifier
+            ),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
+            containerColor = if (isHighlight)
+                Volt.copy(alpha = 0.08f)
+            else MaterialTheme.colorScheme.surface
         ),
-        shape = RoundedCornerShape(16.dp)
+        shape = CardShape
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(14.dp),
+                .padding(Spacing.sm),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(emoji, style = MaterialTheme.typography.titleLarge)
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(Spacing.xxs))
             Text(
                 text = value,
                 style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface
+                fontWeight = FontWeight.Black,
+                color = if (isHighlight) Volt
+                else MaterialTheme.colorScheme.onSurface
             )
             Spacer(modifier = Modifier.height(2.dp))
             Text(
                 text = title,
                 style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Medium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
@@ -236,46 +284,54 @@ private fun StatCard(
 
 @Composable
 private fun HistoryRow(entry: WorkoutEntry, maxWeight: Double) {
+    val isMax = entry.weight == maxWeight
+
     Card(
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
+            containerColor = MaterialTheme.colorScheme.surface
         ),
-        shape = RoundedCornerShape(12.dp)
+        shape = CardShapeSmall
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(14.dp),
+                .padding(Spacing.sm),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
                 text = entry.date,
-                style = MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.Medium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.width(90.dp)
+                modifier = Modifier.width(86.dp)
             )
 
             Box(
                 modifier = Modifier
-                    .clip(CircleShape)
+                    .clip(RoundedCornerShape(Spacing.xs))
                     .background(
-                        if (entry.weight == maxWeight)
-                            MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                        if (isMax) Volt.copy(alpha = 0.15f)
                         else MaterialTheme.colorScheme.surfaceVariant
                     )
-                    .padding(horizontal = 10.dp, vertical = 4.dp)
+                    .then(
+                        if (isMax) Modifier.border(
+                            1.dp,
+                            Volt.copy(alpha = 0.3f),
+                            RoundedCornerShape(Spacing.xs)
+                        ) else Modifier
+                    )
+                    .padding(horizontal = Spacing.xs, vertical = Spacing.xxs)
             ) {
                 Text(
                     text = "${entry.weight} кг",
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Bold,
-                    color = if (entry.weight == maxWeight)
-                        MaterialTheme.colorScheme.primary
+                    color = if (isMax) Volt
                     else MaterialTheme.colorScheme.onSurface
                 )
             }
 
-            Spacer(modifier = Modifier.width(12.dp))
+            Spacer(modifier = Modifier.width(Spacing.sm))
 
             val repsList = entry.reps.split(",").map { it.trim() }
             Text(
