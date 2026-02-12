@@ -88,6 +88,7 @@ fun GymProgressApp(viewModel: WorkoutViewModel = viewModel()) {
                     entries = entries,
                     onAddClick = { showAddDialog = true },
                     onDeleteEntry = { viewModel.deleteEntry(it) },
+                    onUpdateEntry = { viewModel.updateEntry(it) },
                     modifier = Modifier.fillMaxSize()
                 )
             }

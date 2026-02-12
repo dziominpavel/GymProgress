@@ -7,9 +7,5 @@ enum class MuscleGroup(val displayName: String) {
     BICEPS("Бицепс"),
     TRICEPS("Трицепс"),
     LEGS("Ноги"),
-    ABS("Пресс"),
-    GLUTES("Ягодицы"),
-    FOREARMS("Предплечья"),
-    CARDIO("Кардио"),
-    OTHER("Другое")
+    ABS("Пресс")
 }

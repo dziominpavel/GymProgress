@@ -55,6 +55,7 @@ import androidx.compose.ui.unit.dp
 import com.example.gymprogress.data.Exercise
 import com.example.gymprogress.data.MuscleGroup
 import com.example.gymprogress.ui.components.MuscleGroupIcon
+import androidx.compose.foundation.layout.heightIn
 import com.example.gymprogress.ui.theme.CardShape
 import com.example.gymprogress.ui.theme.CardShapeSmall
 import com.example.gymprogress.ui.theme.FabShape
@@ -392,11 +393,24 @@ private fun AddExerciseDialog(
 
                     ExposedDropdownMenu(
                         expanded = expanded,
-                        onDismissRequest = { expanded = false }
+                        onDismissRequest = { expanded = false },
+                        modifier = Modifier.heightIn(max = 350.dp)
                     ) {
                         MuscleGroup.entries.forEach { group ->
                             DropdownMenuItem(
-                                text = { Text(group.displayName) },
+                                text = {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                    ) {
+                                        MuscleGroupIcon(
+                                            muscleGroup = group.name,
+                                            size = 36.dp,
+                                            backgroundColor = MaterialTheme.colorScheme.surfaceVariant
+                                        )
+                                        Text(group.displayName)
+                                    }
+                                },
                                 onClick = {
                                     selectedGroup = group
                                     groupError = false

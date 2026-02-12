@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Delete
 import androidx.room.Insert
 import androidx.room.Query
+import androidx.room.Update
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -11,6 +12,9 @@ interface WorkoutDao {
 
     @Insert
     suspend fun insert(entry: WorkoutEntry)
+
+    @Update
+    suspend fun update(entry: WorkoutEntry)
 
     @Delete
     suspend fun delete(entry: WorkoutEntry)

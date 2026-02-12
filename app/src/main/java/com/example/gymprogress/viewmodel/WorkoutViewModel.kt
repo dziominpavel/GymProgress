@@ -52,6 +52,12 @@ class WorkoutViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    fun updateEntry(entry: WorkoutEntry) {
+        viewModelScope.launch {
+            workoutDao.update(entry)
+        }
+    }
+
     fun deleteEntry(entry: WorkoutEntry) {
         viewModelScope.launch {
             workoutDao.delete(entry)

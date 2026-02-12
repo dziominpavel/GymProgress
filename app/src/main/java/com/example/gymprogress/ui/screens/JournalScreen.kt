@@ -24,6 +24,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
@@ -35,14 +36,17 @@ import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -65,9 +69,11 @@ fun JournalScreen(
     entries: List<WorkoutEntry>,
     onAddClick: () -> Unit,
     onDeleteEntry: (WorkoutEntry) -> Unit,
+    onUpdateEntry: (WorkoutEntry) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var entryToDelete by remember { mutableStateOf<WorkoutEntry?>(null) }
+    var selectedEntry by remember { mutableStateOf<WorkoutEntry?>(null) }
+    var entryToEdit by remember { mutableStateOf<WorkoutEntry?>(null) }
 
     Scaffold(
         modifier = modifier,
@@ -207,8 +213,7 @@ fun JournalScreen(
                         items(dateEntries, key = { it.id }) { entry ->
                             WorkoutEntryCard(
                                 entry = entry,
-                                onLongClick = { entryToDelete = entry },
-                                onDeleteClick = { entryToDelete = entry }
+                                onLongClick = { selectedEntry = entry }
                             )
                         }
                     }
@@ -219,25 +224,39 @@ fun JournalScreen(
         }
     }
 
-    entryToDelete?.let { entry ->
+    selectedEntry?.let { entry ->
         AlertDialog(
-            onDismissRequest = { entryToDelete = null },
-            title = { Text("Удалить запись?", fontWeight = FontWeight.Bold) },
+            onDismissRequest = { selectedEntry = null },
+            title = { Text(entry.exerciseName, fontWeight = FontWeight.Bold) },
             text = {
-                Text("${entry.exerciseName} — ${entry.weight} кг (${entry.date})")
+                Text("${entry.weight} кг — ${entry.reps.split(",").size} подходов (${entry.date})")
             },
             confirmButton = {
                 TextButton(onClick = {
                     onDeleteEntry(entry)
-                    entryToDelete = null
+                    selectedEntry = null
                 }) {
                     Text("Удалить", color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { entryToDelete = null }) {
-                    Text("Отмена")
+                TextButton(onClick = {
+                    selectedEntry = null
+                    entryToEdit = entry
+                }) {
+                    Text("Редактировать")
                 }
+            }
+        )
+    }
+
+    entryToEdit?.let { entry ->
+        EditEntryDialog(
+            entry = entry,
+            onDismiss = { entryToEdit = null },
+            onConfirm = { updated ->
+                onUpdateEntry(updated)
+                entryToEdit = null
             }
         )
     }
@@ -247,8 +266,7 @@ fun JournalScreen(
 @Composable
 private fun WorkoutEntryCard(
     entry: WorkoutEntry,
-    onLongClick: () -> Unit,
-    onDeleteClick: () -> Unit
+    onLongClick: () -> Unit
 ) {
     val accentColor = Volt
 
@@ -347,19 +365,119 @@ private fun WorkoutEntryCard(
                         }
                     }
                 }
-
-                IconButton(
-                    onClick = onDeleteClick,
-                    modifier = Modifier.size(32.dp)
-                ) {
-                    Icon(
-                        Icons.Default.Delete,
-                        contentDescription = "Удалить",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
             }
         }
     }
+}
+
+@Composable
+private fun EditEntryDialog(
+    entry: WorkoutEntry,
+    onDismiss: () -> Unit,
+    onConfirm: (WorkoutEntry) -> Unit
+) {
+    var weightText by remember { mutableStateOf(
+        entry.weight.let { if (it == it.toLong().toDouble()) it.toLong().toString() else it.toString() }
+    ) }
+    val setReps = remember {
+        mutableStateListOf(*entry.reps.split(",").map { it.trim() }.toTypedArray())
+    }
+    var weightError by remember { mutableStateOf(false) }
+    var repsError by remember { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text("Редактировать", fontWeight = FontWeight.Bold)
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    entry.exerciseName,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                OutlinedTextField(
+                    value = weightText,
+                    onValueChange = { weightText = it; weightError = false },
+                    label = { Text("Вес (кг)") },
+                    singleLine = true,
+                    isError = weightError,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Text(
+                    "Подходы",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold
+                )
+
+                setReps.forEachIndexed { index, repsValue ->
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        OutlinedTextField(
+                            value = repsValue,
+                            onValueChange = { setReps[index] = it; repsError = false },
+                            label = { Text("Подход ${index + 1}") },
+                            singleLine = true,
+                            isError = repsError && repsValue.isBlank(),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.weight(1f)
+                        )
+                        if (setReps.size > 1) {
+                            IconButton(onClick = { setReps.removeAt(index) }) {
+                                Icon(
+                                    Icons.Default.Delete,
+                                    contentDescription = "Удалить подход",
+                                    tint = MaterialTheme.colorScheme.error
+                                )
+                            }
+                        } else {
+                            Spacer(modifier = Modifier.width(48.dp))
+                        }
+                    }
+                }
+
+                TextButton(
+                    onClick = { setReps.add("") },
+                    modifier = Modifier.align(Alignment.CenterHorizontally)
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = null)
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Добавить подход")
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                val weight = weightText.replace(",", ".").toDoubleOrNull()
+                val isWeightValid = weight != null && weight > 0
+                val allRepsValid = setReps.all {
+                    it.isNotBlank() && it.toIntOrNull() != null && it.toInt() > 0
+                }
+                weightError = !isWeightValid
+                repsError = !allRepsValid
+
+                if (isWeightValid && allRepsValid) {
+                    onConfirm(
+                        entry.copy(
+                            weight = weight!!,
+                            reps = setReps.joinToString(",")
+                        )
+                    )
+                }
+            }) {
+                Text("Сохранить", fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Отмена") }
+        }
+    )
 }

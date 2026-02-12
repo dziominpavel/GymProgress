@@ -1,6 +1,7 @@
 package com.example.gymprogress.ui.components
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -13,8 +14,11 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.example.gymprogress.R
 import com.example.gymprogress.ui.theme.MuscleBodyGrey
 import com.example.gymprogress.ui.theme.MuscleBodyGreyDark
 import com.example.gymprogress.ui.theme.MuscleHighlightPrimary
@@ -32,28 +36,37 @@ fun MuscleGroupIcon(
     size: Dp = 64.dp,
     backgroundColor: Color = Color(0xFF1A1A1A)
 ) {
-    Canvas(
-        modifier = modifier
-            .size(size)
-            .clip(RoundedCornerShape(4.dp))
-            .background(backgroundColor)
-    ) {
-        val w = this.size.width
-        val h = this.size.height
+    val drawableRes = when (muscleGroup) {
+        "CHEST" -> R.drawable.ic_muscle_chest
+        "BACK" -> R.drawable.ic_muscle_back
+        "SHOULDERS" -> R.drawable.ic_muscle_shoulders
+        "BICEPS" -> R.drawable.ic_muscle_biceps
+        "TRICEPS" -> R.drawable.ic_muscle_triceps
+        "LEGS" -> R.drawable.ic_muscle_legs
+        "ABS" -> R.drawable.ic_muscle_abs
+        else -> null
+    }
 
-        when (muscleGroup) {
-            "CHEST" -> drawChestIcon(w, h)
-            "BACK" -> drawBackIcon(w, h)
-            "SHOULDERS" -> drawShouldersIcon(w, h)
-            "BICEPS" -> drawBicepsIcon(w, h)
-            "TRICEPS" -> drawTricepsIcon(w, h)
-            "LEGS" -> drawLegsIcon(w, h)
-            "ABS" -> drawAbsIcon(w, h)
-            "GLUTES" -> drawGlutesIcon(w, h)
-            "FOREARMS" -> drawForearmsIcon(w, h)
-            "CARDIO" -> drawCardioIcon(w, h)
-            "OTHER" -> drawOtherIcon(w, h)
-            else -> drawOtherIcon(w, h)
+    if (drawableRes != null) {
+        Image(
+            painter = painterResource(id = drawableRes),
+            contentDescription = muscleGroup,
+            contentScale = ContentScale.Crop,
+            modifier = modifier
+                .size(size)
+                .clip(RoundedCornerShape(4.dp))
+                .background(backgroundColor)
+        )
+    } else {
+        Canvas(
+            modifier = modifier
+                .size(size)
+                .clip(RoundedCornerShape(4.dp))
+                .background(backgroundColor)
+        ) {
+            val w = this.size.width
+            val h = this.size.height
+            drawOtherIcon(w, h)
         }
     }
 }
@@ -162,307 +175,7 @@ private fun DrawScope.drawFullBody(w: Float, h: Float) {
     drawLowerLegs(w, h)
 }
 
-// ─── Muscle group specific icons ───
-
-private fun DrawScope.drawChestIcon(w: Float, h: Float) {
-    drawFullBody(w, h)
-    // Highlighted chest / pecs
-    drawOval(
-        MuscleHighlight,
-        topLeft = Offset(w * 0.29f, h * 0.23f),
-        size = Size(w * 0.19f, h * 0.14f)
-    )
-    drawOval(
-        MuscleHighlight,
-        topLeft = Offset(w * 0.52f, h * 0.23f),
-        size = Size(w * 0.19f, h * 0.14f)
-    )
-    // Inner detail lines
-    drawOval(
-        MuscleHighlightLight,
-        topLeft = Offset(w * 0.33f, h * 0.26f),
-        size = Size(w * 0.12f, h * 0.08f)
-    )
-    drawOval(
-        MuscleHighlightLight,
-        topLeft = Offset(w * 0.55f, h * 0.26f),
-        size = Size(w * 0.12f, h * 0.08f)
-    )
-}
-
-private fun DrawScope.drawBackIcon(w: Float, h: Float) {
-    drawFullBody(w, h)
-    // Highlighted back (lats + traps)
-    // Traps
-    val trapsPath = Path().apply {
-        moveTo(w * 0.38f, h * 0.20f)
-        lineTo(w * 0.62f, h * 0.20f)
-        lineTo(w * 0.56f, h * 0.32f)
-        lineTo(w * 0.44f, h * 0.32f)
-        close()
-    }
-    drawPath(trapsPath, MuscleHighlight)
-    // Lats
-    val leftLat = Path().apply {
-        moveTo(w * 0.30f, h * 0.28f)
-        lineTo(w * 0.44f, h * 0.28f)
-        lineTo(w * 0.42f, h * 0.50f)
-        lineTo(w * 0.34f, h * 0.50f)
-        close()
-    }
-    drawPath(leftLat, MuscleHighlight)
-    val rightLat = Path().apply {
-        moveTo(w * 0.56f, h * 0.28f)
-        lineTo(w * 0.70f, h * 0.28f)
-        lineTo(w * 0.66f, h * 0.50f)
-        lineTo(w * 0.58f, h * 0.50f)
-        close()
-    }
-    drawPath(rightLat, MuscleHighlight)
-    // Detail
-    drawOval(
-        MuscleHighlightLight,
-        topLeft = Offset(w * 0.32f, h * 0.32f),
-        size = Size(w * 0.10f, h * 0.14f)
-    )
-    drawOval(
-        MuscleHighlightLight,
-        topLeft = Offset(w * 0.58f, h * 0.32f),
-        size = Size(w * 0.10f, h * 0.14f)
-    )
-}
-
-private fun DrawScope.drawShouldersIcon(w: Float, h: Float) {
-    drawFullBody(w, h)
-    // Highlighted deltoids
-    drawOval(
-        MuscleHighlight,
-        topLeft = Offset(w * 0.14f, h * 0.20f),
-        size = Size(w * 0.16f, h * 0.12f)
-    )
-    drawOval(
-        MuscleHighlight,
-        topLeft = Offset(w * 0.70f, h * 0.20f),
-        size = Size(w * 0.16f, h * 0.12f)
-    )
-    // Detail highlights
-    drawOval(
-        MuscleHighlightLight,
-        topLeft = Offset(w * 0.17f, h * 0.22f),
-        size = Size(w * 0.10f, h * 0.07f)
-    )
-    drawOval(
-        MuscleHighlightLight,
-        topLeft = Offset(w * 0.73f, h * 0.22f),
-        size = Size(w * 0.10f, h * 0.07f)
-    )
-}
-
-private fun DrawScope.drawBicepsIcon(w: Float, h: Float) {
-    drawFullBody(w, h)
-    // Highlighted biceps (front of upper arm)
-    drawOval(
-        MuscleHighlight,
-        topLeft = Offset(w * 0.13f, h * 0.25f),
-        size = Size(w * 0.12f, h * 0.15f)
-    )
-    drawOval(
-        MuscleHighlight,
-        topLeft = Offset(w * 0.75f, h * 0.25f),
-        size = Size(w * 0.12f, h * 0.15f)
-    )
-    // Peaks
-    drawOval(
-        MuscleHighlightLight,
-        topLeft = Offset(w * 0.15f, h * 0.28f),
-        size = Size(w * 0.08f, h * 0.09f)
-    )
-    drawOval(
-        MuscleHighlightLight,
-        topLeft = Offset(w * 0.77f, h * 0.28f),
-        size = Size(w * 0.08f, h * 0.09f)
-    )
-}
-
-private fun DrawScope.drawTricepsIcon(w: Float, h: Float) {
-    drawFullBody(w, h)
-    // Highlighted triceps (back of upper arm)
-    drawOval(
-        MuscleHighlight,
-        topLeft = Offset(w * 0.12f, h * 0.27f),
-        size = Size(w * 0.13f, h * 0.16f)
-    )
-    drawOval(
-        MuscleHighlight,
-        topLeft = Offset(w * 0.75f, h * 0.27f),
-        size = Size(w * 0.13f, h * 0.16f)
-    )
-    drawOval(
-        MuscleHighlightLight,
-        topLeft = Offset(w * 0.14f, h * 0.30f),
-        size = Size(w * 0.09f, h * 0.10f)
-    )
-    drawOval(
-        MuscleHighlightLight,
-        topLeft = Offset(w * 0.77f, h * 0.30f),
-        size = Size(w * 0.09f, h * 0.10f)
-    )
-}
-
-private fun DrawScope.drawLegsIcon(w: Float, h: Float) {
-    drawFullBody(w, h)
-    // Highlighted quads
-    drawRoundRect(
-        MuscleHighlight,
-        topLeft = Offset(w * 0.31f, h * 0.59f),
-        size = Size(w * 0.15f, h * 0.21f),
-        cornerRadius = CornerRadius(w * 0.06f)
-    )
-    drawRoundRect(
-        MuscleHighlight,
-        topLeft = Offset(w * 0.54f, h * 0.59f),
-        size = Size(w * 0.15f, h * 0.21f),
-        cornerRadius = CornerRadius(w * 0.06f)
-    )
-    // Highlighted calves
-    drawRoundRect(
-        MuscleHighlight,
-        topLeft = Offset(w * 0.33f, h * 0.80f),
-        size = Size(w * 0.11f, h * 0.14f),
-        cornerRadius = CornerRadius(w * 0.04f)
-    )
-    drawRoundRect(
-        MuscleHighlight,
-        topLeft = Offset(w * 0.56f, h * 0.80f),
-        size = Size(w * 0.11f, h * 0.14f),
-        cornerRadius = CornerRadius(w * 0.04f)
-    )
-    // Detail
-    drawOval(
-        MuscleHighlightLight,
-        topLeft = Offset(w * 0.34f, h * 0.63f),
-        size = Size(w * 0.10f, h * 0.12f)
-    )
-    drawOval(
-        MuscleHighlightLight,
-        topLeft = Offset(w * 0.56f, h * 0.63f),
-        size = Size(w * 0.10f, h * 0.12f)
-    )
-}
-
-private fun DrawScope.drawAbsIcon(w: Float, h: Float) {
-    drawFullBody(w, h)
-    // Abs: 3 rows x 2 columns of small rounded rects
-    val absColor = MuscleHighlight
-    val absLight = MuscleHighlightLight
-    val colLeft = w * 0.38f
-    val colRight = w * 0.52f
-    val absW = w * 0.10f
-    val absH = h * 0.06f
-    val gap = h * 0.015f
-    val startY = h * 0.30f
-
-    for (row in 0..2) {
-        val y = startY + row * (absH + gap)
-        drawRoundRect(
-            absColor,
-            topLeft = Offset(colLeft, y),
-            size = Size(absW, absH),
-            cornerRadius = CornerRadius(w * 0.02f)
-        )
-        drawRoundRect(
-            absColor,
-            topLeft = Offset(colRight, y),
-            size = Size(absW, absH),
-            cornerRadius = CornerRadius(w * 0.02f)
-        )
-        // Inner highlight
-        drawRoundRect(
-            absLight,
-            topLeft = Offset(colLeft + w * 0.02f, y + h * 0.01f),
-            size = Size(absW - w * 0.04f, absH - h * 0.02f),
-            cornerRadius = CornerRadius(w * 0.01f)
-        )
-        drawRoundRect(
-            absLight,
-            topLeft = Offset(colRight + w * 0.02f, y + h * 0.01f),
-            size = Size(absW - w * 0.04f, absH - h * 0.02f),
-            cornerRadius = CornerRadius(w * 0.01f)
-        )
-    }
-}
-
-private fun DrawScope.drawGlutesIcon(w: Float, h: Float) {
-    drawFullBody(w, h)
-    // Highlighted glutes
-    drawOval(
-        MuscleHighlight,
-        topLeft = Offset(w * 0.30f, h * 0.48f),
-        size = Size(w * 0.18f, h * 0.14f)
-    )
-    drawOval(
-        MuscleHighlight,
-        topLeft = Offset(w * 0.52f, h * 0.48f),
-        size = Size(w * 0.18f, h * 0.14f)
-    )
-    drawOval(
-        MuscleHighlightLight,
-        topLeft = Offset(w * 0.34f, h * 0.51f),
-        size = Size(w * 0.10f, h * 0.08f)
-    )
-    drawOval(
-        MuscleHighlightLight,
-        topLeft = Offset(w * 0.56f, h * 0.51f),
-        size = Size(w * 0.10f, h * 0.08f)
-    )
-}
-
-private fun DrawScope.drawForearmsIcon(w: Float, h: Float) {
-    drawFullBody(w, h)
-    // Highlighted forearms
-    drawRoundRect(
-        MuscleHighlight,
-        topLeft = Offset(w * 0.10f, h * 0.41f),
-        size = Size(w * 0.11f, h * 0.19f),
-        cornerRadius = CornerRadius(w * 0.05f)
-    )
-    drawRoundRect(
-        MuscleHighlight,
-        topLeft = Offset(w * 0.79f, h * 0.41f),
-        size = Size(w * 0.11f, h * 0.19f),
-        cornerRadius = CornerRadius(w * 0.05f)
-    )
-    drawOval(
-        MuscleHighlightLight,
-        topLeft = Offset(w * 0.12f, h * 0.44f),
-        size = Size(w * 0.07f, h * 0.12f)
-    )
-    drawOval(
-        MuscleHighlightLight,
-        topLeft = Offset(w * 0.81f, h * 0.44f),
-        size = Size(w * 0.07f, h * 0.12f)
-    )
-}
-
-private fun DrawScope.drawCardioIcon(w: Float, h: Float) {
-    // Heart shape
-    val heartPath = Path().apply {
-        moveTo(w * 0.5f, h * 0.82f)
-        cubicTo(w * 0.1f, h * 0.55f, w * 0.05f, h * 0.2f, w * 0.5f, h * 0.35f)
-        cubicTo(w * 0.95f, h * 0.2f, w * 0.9f, h * 0.55f, w * 0.5f, h * 0.82f)
-        close()
-    }
-    drawPath(heartPath, MuscleHighlight)
-
-    // Inner highlight
-    val innerPath = Path().apply {
-        moveTo(w * 0.45f, h * 0.70f)
-        cubicTo(w * 0.18f, h * 0.50f, w * 0.15f, h * 0.28f, w * 0.45f, h * 0.40f)
-        cubicTo(w * 0.60f, h * 0.28f, w * 0.55f, h * 0.45f, w * 0.45f, h * 0.70f)
-        close()
-    }
-    drawPath(innerPath, MuscleHighlightLight.copy(alpha = 0.4f))
-}
+// ─── Canvas fallback icons for muscle groups without VectorDrawable ───
 
 private fun DrawScope.drawOtherIcon(w: Float, h: Float) {
     // Dumbbell icon
