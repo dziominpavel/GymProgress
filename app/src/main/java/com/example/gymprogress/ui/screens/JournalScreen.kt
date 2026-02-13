@@ -17,14 +17,19 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
@@ -38,6 +43,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -57,6 +63,8 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.example.gymprogress.data.WorkoutEntry
 import com.example.gymprogress.ui.theme.CardShape
 import com.example.gymprogress.ui.theme.FabShape
@@ -231,20 +239,26 @@ fun JournalScreen(
             text = {
                 Text("${entry.weight} кг — ${entry.reps.split(",").size} подходов (${entry.date})")
             },
-            confirmButton = {
-                TextButton(onClick = {
-                    onDeleteEntry(entry)
-                    selectedEntry = null
-                }) {
-                    Text("Удалить", color = MaterialTheme.colorScheme.error)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = {
-                    selectedEntry = null
-                    entryToEdit = entry
-                }) {
-                    Text("Редактировать")
+            buttons = {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 24.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(onClick = {
+                        selectedEntry = null
+                        entryToEdit = entry
+                    }) {
+                        Text("Редактировать")
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    TextButton(onClick = {
+                        onDeleteEntry(entry)
+                        selectedEntry = null
+                    }) {
+                        Text("Удалить", color = MaterialTheme.colorScheme.error)
+                    }
                 }
             }
         )
@@ -385,99 +399,127 @@ private fun EditEntryDialog(
     var weightError by remember { mutableStateOf(false) }
     var repsError by remember { mutableStateOf(false) }
 
-    AlertDialog(
+    val scrollState = rememberScrollState()
+
+    Dialog(
         onDismissRequest = onDismiss,
-        title = {
-            Text("Редактировать", fontWeight = FontWeight.Bold)
-        },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        properties = DialogProperties(
+            decorFitsSystemWindows = false,
+            usePlatformDefaultWidth = false
+        )
+    ) {
+        Surface(
+            shape = RoundedCornerShape(28.dp),
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 6.dp,
+            modifier = Modifier
+                .statusBarsPadding()
+                .navigationBarsPadding()
+                .imePadding()
+                .padding(horizontal = 16.dp, vertical = 8.dp)
+                .fillMaxSize()
+        ) {
+            Column(modifier = Modifier.padding(24.dp)) {
+                Text("Редактировать", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.headlineSmall)
+                Spacer(modifier = Modifier.height(8.dp))
                 Text(
                     entry.exerciseName,
                     style = MaterialTheme.typography.titleSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                Spacer(modifier = Modifier.height(16.dp))
 
-                OutlinedTextField(
-                    value = weightText,
-                    onValueChange = { weightText = it; weightError = false },
-                    label = { Text("Вес (кг)") },
-                    singleLine = true,
-                    isError = weightError,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                Text(
-                    "Подходы",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold
-                )
-
-                setReps.forEachIndexed { index, repsValue ->
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .verticalScroll(scrollState),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    OutlinedTextField(
+                        value = weightText,
+                        onValueChange = { weightText = it; weightError = false },
+                        label = { Text("Вес (кг)") },
+                        singleLine = true,
+                        isError = weightError,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.fillMaxWidth()
-                    ) {
-                        OutlinedTextField(
-                            value = repsValue,
-                            onValueChange = { setReps[index] = it; repsError = false },
-                            label = { Text("Подход ${index + 1}") },
-                            singleLine = true,
-                            isError = repsError && repsValue.isBlank(),
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.weight(1f)
-                        )
-                        if (setReps.size > 1) {
-                            IconButton(onClick = { setReps.removeAt(index) }) {
-                                Icon(
-                                    Icons.Default.Delete,
-                                    contentDescription = "Удалить подход",
-                                    tint = MaterialTheme.colorScheme.error
-                                )
+                    )
+
+                    Text(
+                        "Подходы",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold
+                    )
+
+                    setReps.forEachIndexed { index, repsValue ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            OutlinedTextField(
+                                value = repsValue,
+                                onValueChange = { setReps[index] = it; repsError = false },
+                                label = { Text("Подход ${index + 1}") },
+                                singleLine = true,
+                                isError = repsError && repsValue.isBlank(),
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.weight(1f)
+                            )
+                            if (setReps.size > 1) {
+                                IconButton(onClick = { setReps.removeAt(index) }) {
+                                    Icon(
+                                        Icons.Default.Delete,
+                                        contentDescription = "Удалить подход",
+                                        tint = MaterialTheme.colorScheme.error
+                                    )
+                                }
+                            } else {
+                                Spacer(modifier = Modifier.width(48.dp))
                             }
-                        } else {
-                            Spacer(modifier = Modifier.width(48.dp))
                         }
+                    }
+
+                    TextButton(
+                        onClick = { setReps.add("") },
+                        modifier = Modifier.align(Alignment.CenterHorizontally)
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = null)
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Добавить подход")
                     }
                 }
 
-                TextButton(
-                    onClick = { setReps.add("") },
-                    modifier = Modifier.align(Alignment.CenterHorizontally)
-                ) {
-                    Icon(Icons.Default.Add, contentDescription = null)
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("Добавить подход")
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = {
-                val weight = weightText.replace(",", ".").toDoubleOrNull()
-                val isWeightValid = weight != null && weight > 0
-                val allRepsValid = setReps.all {
-                    it.isNotBlank() && it.toIntOrNull() != null && it.toInt() > 0
-                }
-                weightError = !isWeightValid
-                repsError = !allRepsValid
+                Spacer(modifier = Modifier.height(24.dp))
 
-                if (isWeightValid && allRepsValid) {
-                    onConfirm(
-                        entry.copy(
-                            weight = weight!!,
-                            reps = setReps.joinToString(",")
-                        )
-                    )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(onClick = onDismiss) { Text("Отмена") }
+                    TextButton(onClick = {
+                        val weight = weightText.replace(",", ".").toDoubleOrNull()
+                        val isWeightValid = weight != null && weight > 0
+                        val allRepsValid = setReps.all {
+                            it.isNotBlank() && it.toIntOrNull() != null && it.toInt() > 0
+                        }
+                        weightError = !isWeightValid
+                        repsError = !allRepsValid
+
+                        if (isWeightValid && allRepsValid) {
+                            onConfirm(
+                                entry.copy(
+                                    weight = weight!!,
+                                    reps = setReps.joinToString(",")
+                                )
+                            )
+                        }
+                    }) {
+                        Text("Сохранить", fontWeight = FontWeight.Bold)
+                    }
                 }
-            }) {
-                Text("Сохранить", fontWeight = FontWeight.Bold)
             }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Отмена") }
         }
-    )
+    }
 }
