@@ -25,7 +25,6 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.rememberScrollState
@@ -58,16 +57,13 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.example.gymprogress.data.WorkoutEntry
+import com.example.gymprogress.data.FormatUtils
 import com.example.gymprogress.ui.theme.CardShape
 import com.example.gymprogress.ui.theme.FabShape
 import com.example.gymprogress.ui.theme.Spacing
@@ -197,7 +193,7 @@ fun JournalScreen(
                                     )
                                     Spacer(modifier = Modifier.width(Spacing.sm))
                                     Text(
-                                        text = date,
+                                        text = FormatUtils.formatDate(date),
                                         style = MaterialTheme.typography.titleSmall,
                                         fontWeight = FontWeight.Black,
                                         color = Volt
@@ -249,7 +245,7 @@ fun JournalScreen(
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        "${entry.weight} кг — ${entry.reps.split(",").size} подходов (${entry.date})",
+                        "${FormatUtils.formatWeight(entry.weight)} кг — ${entry.reps.split(",").size} подходов (${FormatUtils.formatDate(entry.date)})",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -353,9 +349,7 @@ private fun WorkoutEntryCard(
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
-                            text = entry.weight.let {
-                                if (it == it.toLong().toDouble()) it.toLong().toString() else it.toString()
-                            },
+                            text = FormatUtils.formatWeight(entry.weight),
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Black,
                             color = accentColor
@@ -411,9 +405,7 @@ private fun EditEntryDialog(
     onDismiss: () -> Unit,
     onConfirm: (WorkoutEntry) -> Unit
 ) {
-    var weightText by remember { mutableStateOf(
-        entry.weight.let { if (it == it.toLong().toDouble()) it.toLong().toString() else it.toString() }
-    ) }
+    var weightText by remember { mutableStateOf(FormatUtils.formatWeight(entry.weight)) }
     val setReps = remember {
         mutableStateListOf(*entry.reps.split(",").map { it.trim() }.toTypedArray())
     }

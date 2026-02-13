@@ -53,9 +53,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.example.gymprogress.data.Exercise
+import com.example.gymprogress.data.ExerciseType
 import com.example.gymprogress.data.MuscleGroup
 import com.example.gymprogress.ui.components.MuscleGroupIcon
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import com.example.gymprogress.ui.theme.CardShape
 import com.example.gymprogress.ui.theme.CardShapeSmall
 import com.example.gymprogress.ui.theme.FabShape
@@ -65,12 +68,14 @@ import com.example.gymprogress.ui.theme.Volt
 @Composable
 fun ExercisesScreen(
     exercises: List<Exercise>,
-    onAddExercise: (name: String, muscleGroup: String) -> Unit,
+    onAddExercise: (name: String, muscleGroup: String, exerciseType: String) -> Unit,
     onDeleteExercise: (Exercise) -> Unit,
+    onUpdateExercise: (Exercise) -> Unit,
     modifier: Modifier = Modifier
 ) {
     var showAddDialog by remember { mutableStateOf(false) }
     var exerciseToDelete by remember { mutableStateOf<Exercise?>(null) }
+    var exerciseToEdit by remember { mutableStateOf<Exercise?>(null) }
     val expandedGroups = remember { mutableStateMapOf<String, Boolean>() }
 
     val grouped = exercises.groupBy { it.muscleGroup }
@@ -180,6 +185,7 @@ fun ExercisesScreen(
                             items(groupExercises, key = { it.id }) { exercise ->
                                 ExerciseItem(
                                     exercise = exercise,
+                                    onClick = { exerciseToEdit = exercise },
                                     onDelete = { exerciseToDelete = exercise }
                                 )
                             }
@@ -194,10 +200,22 @@ fun ExercisesScreen(
 
     if (showAddDialog) {
         AddExerciseDialog(
+            existingNames = exercises.map { it.name.lowercase() }.toSet(),
             onDismiss = { showAddDialog = false },
-            onConfirm = { name, group ->
-                onAddExercise(name, group)
+            onConfirm = { name, group, type ->
+                onAddExercise(name, group, type)
                 showAddDialog = false
+            }
+        )
+    }
+
+    exerciseToEdit?.let { exercise ->
+        EditExerciseDialog(
+            exercise = exercise,
+            onDismiss = { exerciseToEdit = null },
+            onConfirm = { updated ->
+                onUpdateExercise(updated)
+                exerciseToEdit = null
             }
         )
     }
@@ -300,11 +318,12 @@ private fun MuscleGroupHeader(
 }
 
 @Composable
-private fun ExerciseItem(exercise: Exercise, onDelete: () -> Unit) {
+private fun ExerciseItem(exercise: Exercise, onClick: () -> Unit, onDelete: () -> Unit) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(start = Spacing.sm),
+            .padding(start = Spacing.sm)
+            .clickable(onClick = onClick),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant
         ),
@@ -323,13 +342,21 @@ private fun ExerciseItem(exercise: Exercise, onDelete: () -> Unit) {
                     .background(Volt)
             )
             Spacer(modifier = Modifier.width(Spacing.sm))
-            Text(
-                text = exercise.name,
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.Medium,
-                modifier = Modifier.weight(1f),
-                color = MaterialTheme.colorScheme.onSurface
-            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = exercise.name,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                val typeName = ExerciseType.entries
+                    .find { it.name == exercise.exerciseType }?.displayName ?: "Базовое"
+                Text(
+                    text = typeName,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
             IconButton(
                 onClick = onDelete,
                 modifier = Modifier.size(32.dp)
@@ -348,13 +375,16 @@ private fun ExerciseItem(exercise: Exercise, onDelete: () -> Unit) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AddExerciseDialog(
+    existingNames: Set<String> = emptySet(),
     onDismiss: () -> Unit,
-    onConfirm: (name: String, muscleGroup: String) -> Unit
+    onConfirm: (name: String, muscleGroup: String, exerciseType: String) -> Unit
 ) {
     var name by remember { mutableStateOf("") }
     var selectedGroup by remember { mutableStateOf<MuscleGroup?>(null) }
+    var selectedType by remember { mutableStateOf(ExerciseType.COMPOUND) }
     var expanded by remember { mutableStateOf(false) }
     var nameError by remember { mutableStateOf(false) }
+    var nameDuplicateError by remember { mutableStateOf(false) }
     var groupError by remember { mutableStateOf(false) }
 
     AlertDialog(
@@ -366,10 +396,13 @@ private fun AddExerciseDialog(
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedTextField(
                     value = name,
-                    onValueChange = { name = it; nameError = false },
+                    onValueChange = { name = it; nameError = false; nameDuplicateError = false },
                     label = { Text("Название") },
                     singleLine = true,
-                    isError = nameError,
+                    isError = nameError || nameDuplicateError,
+                    supportingText = if (nameDuplicateError) {
+                        { Text("Упражнение с таким именем уже существует") }
+                    } else null,
                     shape = RoundedCornerShape(12.dp),
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -420,17 +453,92 @@ private fun AddExerciseDialog(
                         }
                     }
                 }
+
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    ExerciseType.entries.forEach { type ->
+                        FilterChip(
+                            selected = selectedType == type,
+                            onClick = { selectedType = type },
+                            label = { Text(type.displayName) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = Volt.copy(alpha = 0.15f),
+                                selectedLabelColor = Volt
+                            )
+                        )
+                    }
+                }
             }
         },
         confirmButton = {
             TextButton(onClick = {
                 nameError = name.isBlank()
+                nameDuplicateError = !nameError && name.trim().lowercase() in existingNames
                 groupError = selectedGroup == null
-                if (!nameError && !groupError) {
-                    onConfirm(name, selectedGroup!!.name)
+                if (!nameError && !nameDuplicateError && !groupError) {
+                    onConfirm(name.trim(), selectedGroup!!.name, selectedType.name)
                 }
             }) {
                 Text("Создать", fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Отмена") }
+        }
+    )
+}
+
+@Composable
+private fun EditExerciseDialog(
+    exercise: Exercise,
+    onDismiss: () -> Unit,
+    onConfirm: (Exercise) -> Unit
+) {
+    val currentType = ExerciseType.entries
+        .find { it.name == exercise.exerciseType } ?: ExerciseType.COMPOUND
+    var selectedType by remember { mutableStateOf(currentType) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text("Редактировать упражнение", fontWeight = FontWeight.Bold)
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    text = exercise.name,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = "Тип упражнения",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    ExerciseType.entries.forEach { type ->
+                        FilterChip(
+                            selected = selectedType == type,
+                            onClick = { selectedType = type },
+                            label = { Text(type.displayName) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = Volt.copy(alpha = 0.15f),
+                                selectedLabelColor = Volt
+                            )
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                onConfirm(exercise.copy(exerciseType = selectedType.name))
+            }) {
+                Text("Сохранить", fontWeight = FontWeight.Bold)
             }
         },
         dismissButton = {

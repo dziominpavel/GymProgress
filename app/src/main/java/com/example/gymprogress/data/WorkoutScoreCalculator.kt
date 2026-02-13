@@ -1,5 +1,8 @@
 package com.example.gymprogress.data
 
+import kotlin.math.abs
+import kotlin.math.sqrt
+
 enum class ProgressStatus {
     BETTER, SAME, WORSE, FIRST
 }
@@ -9,6 +12,7 @@ data class SessionScore(
     val volumeScore: Double,
     val intensityScore: Double,
     val repQuality: Double,
+    val setsBonus: Double,
     val fatiguePenalty: Double
 )
 
@@ -23,12 +27,17 @@ data class ScoreDetail(
     val previousSets: Int,
     val currentRepQuality: Double,
     val previousRepQuality: Double,
+    val currentSetsBonus: Double,
+    val previousSetsBonus: Double,
     val currentFatiguePenalty: Double,
     val previousFatiguePenalty: Double,
     val currentScore: Double,
     val previousScore: Double,
     val currentReps: List<Int>,
-    val previousReps: List<Int>
+    val previousReps: List<Int>,
+    val goalName: String,
+    val exerciseTypeName: String,
+    val targetRange: String
 )
 
 data class ComparisonResult(
@@ -40,29 +49,52 @@ data class ComparisonResult(
 
 object WorkoutScoreCalculator {
 
-    private const val WV = 0.45
-    private const val WI = 0.25
-    private const val WR = 0.30
+    private const val WINDOW_SIZE = 20
+    private const val TREND_SIZE = 3
 
-    private val TARGET_RANGE = 8..12
+    private data class Weights(val wV: Double, val wI: Double, val wR: Double)
+
+    private fun getWeights(goal: TrainingGoal, type: ExerciseType): Weights = when (goal) {
+        TrainingGoal.HYPERTROPHY -> when (type) {
+            ExerciseType.COMPOUND -> Weights(0.45, 0.25, 0.30)
+            ExerciseType.ISOLATION -> Weights(0.35, 0.15, 0.50)
+        }
+        TrainingGoal.STRENGTH -> when (type) {
+            ExerciseType.COMPOUND -> Weights(0.25, 0.45, 0.30)
+            ExerciseType.ISOLATION -> Weights(0.20, 0.40, 0.40)
+        }
+        TrainingGoal.ENDURANCE -> Weights(0.50, 0.10, 0.40)
+    }
+
+    private fun parseReps(entry: WorkoutEntry): List<Int> =
+        entry.reps.split(",").mapNotNull { it.trim().toIntOrNull() }
+
+    private fun calcVolume(entry: WorkoutEntry): Double {
+        val reps = parseReps(entry)
+        return entry.weight * reps.sum()
+    }
 
     fun calcSessionScore(
         entry: WorkoutEntry,
-        history: List<WorkoutEntry>
+        history: List<WorkoutEntry>,
+        goal: TrainingGoal = TrainingGoal.HYPERTROPHY,
+        exerciseType: ExerciseType = ExerciseType.COMPOUND
     ): SessionScore {
-        val reps = entry.reps.split(",").mapNotNull { it.trim().toIntOrNull() }
-        if (reps.isEmpty()) return SessionScore(0.0, 0.0, 0.0, 0.0, 0.0)
+        val reps = parseReps(entry)
+        if (reps.isEmpty()) return SessionScore(0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+
+        val w = getWeights(goal, exerciseType)
+        val targetRange = goal.targetRange
+
+        val window = history.take(WINDOW_SIZE)
 
         val totalReps = reps.sum()
         val volume = entry.weight * totalReps
 
-        val allVolumes = history.map { e ->
-            val r = e.reps.split(",").mapNotNull { it.trim().toIntOrNull() }
-            e.weight * r.sum()
-        } + volume
+        val allVolumes = window.map { calcVolume(it) } + volume
         val maxVolume = allVolumes.maxOrNull() ?: 1.0
 
-        val allWeights = history.map { it.weight } + entry.weight
+        val allWeights = window.map { it.weight } + entry.weight
         val maxWeight = allWeights.maxOrNull() ?: 1.0
 
         val volumeScore = if (maxVolume > 0) volume / maxVolume else 0.0
@@ -70,37 +102,64 @@ object WorkoutScoreCalculator {
 
         val repQuality = reps.map { r ->
             when (r) {
-                in TARGET_RANGE -> 1.0
-                in (TARGET_RANGE.first - 2) until TARGET_RANGE.first,
-                in (TARGET_RANGE.last + 1)..(TARGET_RANGE.last + 3) -> 0.6
+                in targetRange -> 1.0
+                in goal.nearRange -> 0.6
                 else -> 0.3
             }
         }.average()
 
-        val fatiguePenalty = if (reps.size >= 2 && reps.first() > 0) {
-            val dropRate = 1.0 - reps.last().toDouble() / reps.first()
-            when {
-                dropRate <= 0.20 -> 0.00
-                dropRate <= 0.35 -> 0.05
-                dropRate <= 0.50 -> 0.10
-                else -> 0.15
-            }
-        } else 0.0
+        val setsBonus = when {
+            reps.size >= 4 -> 0.04
+            reps.size >= 3 -> 0.02
+            else -> 0.0
+        }
 
-        val raw = WV * volumeScore + WI * intensityScore + WR * repQuality - fatiguePenalty
+        val fatiguePenalty = calcFatiguePenalty(reps)
+
+        val raw = w.wV * volumeScore + w.wI * intensityScore + w.wR * repQuality +
+                setsBonus - fatiguePenalty
         val score = raw.coerceIn(0.0, 1.0)
 
-        return SessionScore(score, volumeScore, intensityScore, repQuality, fatiguePenalty)
+        return SessionScore(score, volumeScore, intensityScore, repQuality, setsBonus, fatiguePenalty)
+    }
+
+    private fun calcFatiguePenalty(reps: List<Int>): Double {
+        if (reps.size < 2) return 0.0
+
+        val mean = reps.average()
+        if (mean == 0.0) return 0.0
+
+        val variance = reps.map { (it - mean) * (it - mean) }.average()
+        val cv = sqrt(variance) / mean
+
+        val dropRate = if (reps.first() > 0)
+            1.0 - reps.last().toDouble() / reps.first() else 0.0
+
+        val combined = (cv + maxOf(dropRate, 0.0)) / 2.0
+
+        return when {
+            combined <= 0.10 -> 0.00
+            combined <= 0.20 -> 0.03
+            combined <= 0.30 -> 0.07
+            combined <= 0.40 -> 0.12
+            else -> 0.15
+        }
     }
 
     fun compare(
         current: WorkoutEntry,
         previous: WorkoutEntry?,
-        history: List<WorkoutEntry>
+        history: List<WorkoutEntry>,
+        goal: TrainingGoal = TrainingGoal.HYPERTROPHY,
+        exerciseType: ExerciseType = ExerciseType.COMPOUND
     ): ComparisonResult {
-        val currentScore = calcSessionScore(current, history)
-        val curReps = current.reps.split(",").mapNotNull { it.trim().toIntOrNull() }
+        val currentScore = calcSessionScore(current, history, goal, exerciseType)
+        val curReps = parseReps(current)
         val curVolume = current.weight * curReps.sum()
+
+        val goalName = goal.displayName
+        val typeName = exerciseType.displayName
+        val targetStr = "${goal.targetRange.first}–${goal.targetRange.last}"
 
         if (previous == null) {
             val detail = ScoreDetail(
@@ -114,22 +173,34 @@ object WorkoutScoreCalculator {
                 previousSets = 0,
                 currentRepQuality = currentScore.repQuality,
                 previousRepQuality = 0.0,
+                currentSetsBonus = currentScore.setsBonus,
+                previousSetsBonus = 0.0,
                 currentFatiguePenalty = currentScore.fatiguePenalty,
                 previousFatiguePenalty = 0.0,
                 currentScore = currentScore.score,
                 previousScore = 0.0,
                 currentReps = curReps,
-                previousReps = emptyList()
+                previousReps = emptyList(),
+                goalName = goalName,
+                exerciseTypeName = typeName,
+                targetRange = targetStr
             )
             return ComparisonResult(ProgressStatus.FIRST, 0.0, "Первая тренировка", detail)
         }
 
-        val prevScore = calcSessionScore(previous, history)
-        val prevReps = previous.reps.split(",").mapNotNull { it.trim().toIntOrNull() }
+        val trendEntries = history.drop(1).take(TREND_SIZE)
+        val trendScore = if (trendEntries.isNotEmpty()) {
+            trendEntries.map { calcSessionScore(it, history, goal, exerciseType).score }.average()
+        } else {
+            calcSessionScore(previous, history, goal, exerciseType).score
+        }
+
+        val prevScore = calcSessionScore(previous, history, goal, exerciseType)
+        val prevReps = parseReps(previous)
         val prevVolume = previous.weight * prevReps.sum()
 
-        val delta = currentScore.score - prevScore.score
-        val pct = if (prevScore.score > 0) (delta / prevScore.score) * 100 else 0.0
+        val delta = currentScore.score - trendScore
+        val pct = if (trendScore > 0) (delta / trendScore) * 100 else 0.0
 
         val status = when {
             delta >= 0.03 -> ProgressStatus.BETTER
@@ -142,21 +213,27 @@ object WorkoutScoreCalculator {
         val intDelta = currentScore.intensityScore - prevScore.intensityScore
         val repDelta = currentScore.repQuality - prevScore.repQuality
 
-        val absVol = kotlin.math.abs(volDelta)
-        val absInt = kotlin.math.abs(intDelta)
-        val absRep = kotlin.math.abs(repDelta)
+        val absVol = abs(volDelta)
+        val absInt = abs(intDelta)
+        val absRep = abs(repDelta)
         val maxComponent = maxOf(absVol, absInt, absRep)
 
-        when {
-            maxComponent == absVol && absVol > 0.01 ->
+        when (maxComponent) {
+            absVol -> if (absVol > 0.01)
                 reasons += "Объём ${if (volDelta > 0) "↑" else "↓"}"
-            maxComponent == absInt && absInt > 0.01 ->
+            absInt -> if (absInt > 0.01)
                 reasons += "Вес ${if (intDelta > 0) "↑" else "↓"}"
-            maxComponent == absRep && absRep > 0.01 ->
+            absRep -> if (absRep > 0.01)
                 reasons += "Качество повторов ${if (repDelta > 0) "↑" else "↓"}"
         }
         if (currentScore.repQuality < 0.6) {
-            reasons += "повторы вне 8–12"
+            reasons += "повторы вне $targetStr"
+        }
+        if (currentScore.setsBonus > prevScore.setsBonus) {
+            reasons += "Больше подходов ↑"
+        }
+        if (currentScore.fatiguePenalty > prevScore.fatiguePenalty + 0.02) {
+            reasons += "Усталость ↑"
         }
 
         val detail = ScoreDetail(
@@ -170,12 +247,17 @@ object WorkoutScoreCalculator {
             previousSets = prevReps.size,
             currentRepQuality = currentScore.repQuality,
             previousRepQuality = prevScore.repQuality,
+            currentSetsBonus = currentScore.setsBonus,
+            previousSetsBonus = prevScore.setsBonus,
             currentFatiguePenalty = currentScore.fatiguePenalty,
             previousFatiguePenalty = prevScore.fatiguePenalty,
             currentScore = currentScore.score,
             previousScore = prevScore.score,
             currentReps = curReps,
-            previousReps = prevReps
+            previousReps = prevReps,
+            goalName = goalName,
+            exerciseTypeName = typeName,
+            targetRange = targetStr
         )
 
         val reasonText = if (reasons.isEmpty()) "Без значимых изменений" else reasons.joinToString(", ")

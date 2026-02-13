@@ -66,8 +66,10 @@ fun AddEntryDialog(
     onConfirm: (date: String, exerciseName: String, weight: Double, reps: String) -> Unit
 ) {
     val today = LocalDate.now()
-    val formatter = DateTimeFormatter.ofPattern("dd.MM.yyyy")
-    var dateText by remember { mutableStateOf(today.format(formatter)) }
+    val displayFormatter = DateTimeFormatter.ofPattern("dd.MM.yyyy")
+    val storageFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
+    var displayDate by remember { mutableStateOf(today.format(displayFormatter)) }
+    var storageDate by remember { mutableStateOf(today.format(storageFormatter)) }
     var showDatePicker by remember { mutableStateOf(false) }
 
     var selectedExercise by remember { mutableStateOf<Exercise?>(null) }
@@ -125,7 +127,7 @@ fun AddEntryDialog(
                 ) {
                     // Date field with calendar picker
                     OutlinedTextField(
-                        value = dateText,
+                        value = displayDate,
                         onValueChange = {},
                         readOnly = true,
                         label = { Text("Дата") },
@@ -302,7 +304,7 @@ fun AddEntryDialog(
 
                         if (isExerciseValid && isWeightValid && allRepsValid) {
                             onConfirm(
-                                dateText,
+                                storageDate,
                                 selectedExercise!!.name,
                                 weight!!,
                                 setReps.joinToString(",")
@@ -330,7 +332,8 @@ fun AddEntryDialog(
                         val selected = Instant.ofEpochMilli(millis)
                             .atZone(ZoneId.systemDefault())
                             .toLocalDate()
-                        dateText = selected.format(formatter)
+                        displayDate = selected.format(displayFormatter)
+                        storageDate = selected.format(storageFormatter)
                     }
                     showDatePicker = false
                 }) {
