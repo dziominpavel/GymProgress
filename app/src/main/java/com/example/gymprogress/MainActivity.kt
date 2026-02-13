@@ -4,11 +4,15 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -48,6 +52,7 @@ class MainActivity : ComponentActivity() {
 fun GymProgressApp(viewModel: WorkoutViewModel = viewModel()) {
     var currentDestination by rememberSaveable { mutableStateOf(AppDestinations.JOURNAL) }
     var showAddDialog by remember { mutableStateOf(false) }
+    var showMoreMenu by remember { mutableStateOf(false) }
 
     val entries by viewModel.allEntries.collectAsState()
     val exerciseNames by viewModel.exerciseNames.collectAsState()
@@ -76,6 +81,37 @@ fun GymProgressApp(viewModel: WorkoutViewModel = viewModel()) {
                     onClick = { currentDestination = it }
                 )
             }
+            item(
+                icon = {
+                    Box {
+                        Icon(
+                            Icons.Default.MoreVert,
+                            contentDescription = "Ещё"
+                        )
+                        DropdownMenu(
+                            expanded = showMoreMenu,
+                            onDismissRequest = { showMoreMenu = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Настройки") },
+                                onClick = { showMoreMenu = false }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("О приложении") },
+                                onClick = { showMoreMenu = false }
+                            )
+                        }
+                    }
+                },
+                label = {
+                    Text(
+                        "Ещё",
+                        fontWeight = FontWeight.Normal
+                    )
+                },
+                selected = false,
+                onClick = { showMoreMenu = !showMoreMenu }
+            )
         },
         navigationSuiteColors = NavigationSuiteDefaults.colors(
             navigationBarContainerColor = MaterialTheme.colorScheme.surface,

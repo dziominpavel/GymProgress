@@ -25,6 +25,6 @@ interface WorkoutDao {
     @Query("SELECT DISTINCT exerciseName FROM workout_entries ORDER BY exerciseName ASC")
     fun getAllExerciseNames(): Flow<List<String>>
 
-    @Query("SELECT * FROM workout_entries WHERE exerciseName = :name ORDER BY date ASC")
+    @Query("SELECT * FROM workout_entries WHERE exerciseName = :name ORDER BY date DESC, id DESC")
     fun getEntriesByExercise(name: String): Flow<List<WorkoutEntry>>
 }
