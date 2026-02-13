@@ -18,7 +18,7 @@ object FormatUtils {
         return if (seconds >= 60) {
             val min = seconds / 60
             val sec = seconds % 60
-            if (sec > 0) "$minм ${sec}с" else "$min мин"
+            if (sec > 0) "${min}м ${sec}с" else "${min} мин"
         } else {
             "${seconds}с"
         }
