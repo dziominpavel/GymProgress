@@ -7,7 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.gymprogress.data.AppDatabase
 import com.example.gymprogress.data.Exercise
 import com.example.gymprogress.data.ExerciseType
-import com.example.gymprogress.data.GeminiService
+import com.example.gymprogress.data.AiService
 import com.example.gymprogress.data.SettingsRepository
 import com.example.gymprogress.data.TrainerRecommendationEngine
 import com.example.gymprogress.data.TrainerSettings
@@ -34,9 +34,9 @@ class WorkoutViewModel(application: Application) : AndroidViewModel(application)
     private val exerciseDao = db.exerciseDao()
     private val settingsRepository = SettingsRepository(application)
     private val trainerEngine = TrainerRecommendationEngine()
-    private val geminiService = GeminiService()
+    private val aiService = AiService()
 
-    val isAiAvailable: Boolean get() = geminiService.isAvailable()
+    val isAiAvailable: Boolean get() = aiService.isAvailable()
 
     private val _aiAdvice = MutableStateFlow<String?>(null)
     val aiAdvice: StateFlow<String?> = _aiAdvice.asStateFlow()
@@ -193,7 +193,7 @@ class WorkoutViewModel(application: Application) : AndroidViewModel(application)
         _aiAdvice.value = null
         viewModelScope.launch {
             try {
-                val advice = geminiService.getAdvice(
+                val advice = aiService.getAdvice(
                     recommendation = rec,
                     history = allEntries.value,
                     exercises = allExercises.value,

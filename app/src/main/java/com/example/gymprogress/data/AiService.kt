@@ -10,7 +10,7 @@ import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
 import java.net.URL
 
-class GeminiService {
+class AiService {
 
     fun isAvailable(): Boolean = BuildConfig.OPENROUTER_API_KEY.isNotBlank()
 
@@ -142,6 +142,6 @@ $recText$missingText
     }
 
     companion object {
-        private const val TAG = "GeminiService"
+        private const val TAG = "AiService"
     }
 }
