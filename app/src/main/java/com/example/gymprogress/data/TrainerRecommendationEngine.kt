@@ -192,7 +192,7 @@ class TrainerRecommendationEngine {
 
     private fun buildExerciseList(
         muscleGroups: List<MuscleGroup>,
-        priorityGroups: List<MuscleGroup>,
+        @Suppress("unused") priorityGroups: List<MuscleGroup>,
         exercises: List<Exercise>,
         history: List<WorkoutEntry>,
         trainingGoal: TrainingGoal,
@@ -201,35 +201,50 @@ class TrainerRecommendationEngine {
         isDeload: Boolean
     ): List<ExerciseRecommendation> {
         val result = mutableListOf<ExerciseRecommendation>()
+        val lastSessionNames = getLastSessionExercises(muscleGroups, exercises, history)
 
         for (group in muscleGroups) {
             val groupExercises = exercises.filter { it.muscleGroup == group.name }
             if (groupExercises.isEmpty()) continue
 
-            val compound = groupExercises.filter { it.exerciseType == ExerciseType.COMPOUND.name }
-            val isolation = groupExercises.filter { it.exerciseType == ExerciseType.ISOLATION.name }
-
-            val isPriority = group in priorityGroups
-
-            val selectedCompound = compound.take(1)
-            val selectedIsolation = isolation.take(if (isPriority) 2 else 1)
-            val selected = selectedCompound + selectedIsolation
-
-            if (selected.isEmpty()) {
-                val fallback = groupExercises.take(if (isPriority) 2 else 1)
-                for (ex in fallback) {
-                    result.add(buildExerciseRec(ex, history, trainingGoal, progressionType, includeWarmup, isDeload))
-                }
+            val selected = if (lastSessionNames.isNotEmpty()) {
+                val fromLastSession = groupExercises.filter { it.name in lastSessionNames }
+                fromLastSession.ifEmpty { groupExercises }
             } else {
-                for (ex in selected) {
-                    result.add(buildExerciseRec(ex, history, trainingGoal, progressionType, includeWarmup, isDeload))
-                }
+                groupExercises
+            }
+
+            for (ex in selected) {
+                result.add(buildExerciseRec(ex, history, trainingGoal, progressionType, includeWarmup, isDeload))
             }
         }
 
         return result.sortedBy {
             if (it.exercise.exerciseType == ExerciseType.COMPOUND.name) 0 else 1
         }
+    }
+
+    private fun getLastSessionExercises(
+        muscleGroups: List<MuscleGroup>,
+        exercises: List<Exercise>,
+        history: List<WorkoutEntry>
+    ): Set<String> {
+        if (history.isEmpty()) return emptySet()
+
+        val groupNames = muscleGroups.map { it.name }.toSet()
+        val relevantExerciseNames = exercises
+            .filter { it.muscleGroup in groupNames }
+            .map { it.name }
+            .toSet()
+
+        val relevantHistory = history.filter { it.exerciseName in relevantExerciseNames }
+        if (relevantHistory.isEmpty()) return emptySet()
+
+        val lastDate = relevantHistory.maxOf { it.date }
+        return relevantHistory
+            .filter { it.date == lastDate }
+            .map { it.exerciseName }
+            .toSet()
     }
 
     private fun buildExerciseRec(
@@ -248,7 +263,7 @@ class TrainerRecommendationEngine {
         val isCompound = exercise.exerciseType == ExerciseType.COMPOUND.name
         val weightStep = if (isCompound) 2.5 else 1.25
         val targetRange = trainingGoal.targetRange
-        val workingSets = if (isCompound) 4 else 3
+        val workingSets = 3
         val restSeconds = getRestSeconds(trainingGoal, isCompound)
 
         if (recentEntries.isEmpty()) {
@@ -350,18 +365,14 @@ class TrainerRecommendationEngine {
     private fun generateWarmupSets(workingWeight: Double, @Suppress("unused") targetRange: IntRange): List<SetRecommendation> {
         val sets = mutableListOf<SetRecommendation>()
 
-        val w25 = (workingWeight * 0.25).roundToNearest(2.5)
         val w50 = (workingWeight * 0.50).roundToNearest(2.5)
         val w75 = (workingWeight * 0.75).roundToNearest(2.5)
 
-        if (w25 >= 10.0) {
-            sets.add(SetRecommendation(SetType.WARMUP, w25, 12..15, restSeconds = 60))
-        }
         if (w50 >= 10.0) {
-            sets.add(SetRecommendation(SetType.WARMUP, w50, 8..10, restSeconds = 60))
+            sets.add(SetRecommendation(SetType.WARMUP, w50, 10..12, restSeconds = 60))
         }
         if (w75 in 10.0..<workingWeight) {
-            sets.add(SetRecommendation(SetType.WARMUP, w75, 4..6, restSeconds = 90))
+            sets.add(SetRecommendation(SetType.WARMUP, w75, 5..8, restSeconds = 90))
         }
 
         return sets

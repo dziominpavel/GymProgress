@@ -18,15 +18,21 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -52,6 +58,10 @@ fun TrainerScreen(
     onBack: () -> Unit,
     onOpenSettings: () -> Unit,
     onStartWorkout: (WorkoutRecommendation) -> Unit,
+    isAiAvailable: Boolean = false,
+    aiAdvice: String? = null,
+    aiLoading: Boolean = false,
+    onAskAi: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Scaffold(
@@ -135,6 +145,16 @@ fun TrainerScreen(
 
                         items(recommendation.exercises) { exerciseRec ->
                             ExerciseRecCard(exerciseRec)
+                        }
+
+                        if (isAiAvailable) {
+                            item {
+                                AiAdviceSection(
+                                    advice = aiAdvice,
+                                    isLoading = aiLoading,
+                                    onAskAi = onAskAi
+                                )
+                            }
                         }
 
                         item { Spacer(modifier = Modifier.height(80.dp)) }
@@ -411,6 +431,78 @@ private fun ExerciseRecCard(rec: ExerciseRecommendation) {
                     fontWeight = FontWeight.Medium,
                     color = Volt
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AiAdviceSection(
+    advice: String?,
+    isLoading: Boolean,
+    onAskAi: () -> Unit
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Spacer(modifier = Modifier.height(Spacing.sm))
+
+        if (advice == null && !isLoading) {
+            OutlinedButton(
+                onClick = onAskAi,
+                border = BorderStroke(1.dp, Volt.copy(alpha = 0.5f)),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = Volt)
+            ) {
+                Text("Спросить ИИ \uD83E\uDD16", fontWeight = FontWeight.Bold)
+            }
+        }
+
+        if (isLoading) {
+            Spacer(modifier = Modifier.height(Spacing.sm))
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
+            ) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(16.dp),
+                    strokeWidth = 2.dp,
+                    color = Volt
+                )
+                Text(
+                    "ИИ анализирует...",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+
+        AnimatedVisibility(visible = advice != null) {
+            advice?.let {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = Spacing.sm),
+                    colors = CardDefaults.cardColors(
+                        containerColor = Volt.copy(alpha = 0.08f)
+                    ),
+                    shape = CardShape
+                ) {
+                    Column(modifier = Modifier.padding(Spacing.md)) {
+                        Text(
+                            text = "Совет ИИ",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = Volt
+                        )
+                        Spacer(modifier = Modifier.height(Spacing.xs))
+                        Text(
+                            text = it,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                }
             }
         }
     }

@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.gymprogress.data.AppDatabase
 import com.example.gymprogress.data.Exercise
 import com.example.gymprogress.data.ExerciseType
+import com.example.gymprogress.data.GeminiService
 import com.example.gymprogress.data.SettingsRepository
 import com.example.gymprogress.data.TrainerRecommendationEngine
 import com.example.gymprogress.data.TrainerSettings
@@ -33,6 +34,15 @@ class WorkoutViewModel(application: Application) : AndroidViewModel(application)
     private val exerciseDao = db.exerciseDao()
     private val settingsRepository = SettingsRepository(application)
     private val trainerEngine = TrainerRecommendationEngine()
+    private val geminiService = GeminiService()
+
+    val isAiAvailable: Boolean get() = geminiService.isAvailable()
+
+    private val _aiAdvice = MutableStateFlow<String?>(null)
+    val aiAdvice: StateFlow<String?> = _aiAdvice.asStateFlow()
+
+    private val _aiLoading = MutableStateFlow(false)
+    val aiLoading: StateFlow<Boolean> = _aiLoading.asStateFlow()
 
     val allEntries: StateFlow<List<WorkoutEntry>> = workoutDao.getAllEntries()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -174,6 +184,34 @@ class WorkoutViewModel(application: Application) : AndroidViewModel(application)
 
     fun getAlternatives(exercise: Exercise): List<Exercise> {
         return trainerEngine.getAlternatives(exercise, allExercises.value)
+    }
+
+    fun askAi() {
+        val rec = workoutRecommendation.value ?: return
+        if (_aiLoading.value) return
+        _aiLoading.value = true
+        _aiAdvice.value = null
+        viewModelScope.launch {
+            try {
+                val advice = geminiService.getAdvice(
+                    recommendation = rec,
+                    history = allEntries.value,
+                    exercises = allExercises.value,
+                    settings = trainerSettings.value,
+                    trainingGoal = trainingGoal.value
+                )
+                _aiAdvice.value = advice
+            } catch (e: Exception) {
+                _aiAdvice.value = "Ошибка: ${e.message}"
+                Log.e(TAG, "AI advice failed", e)
+            } finally {
+                _aiLoading.value = false
+            }
+        }
+    }
+
+    fun clearAiAdvice() {
+        _aiAdvice.value = null
     }
 
     companion object {
