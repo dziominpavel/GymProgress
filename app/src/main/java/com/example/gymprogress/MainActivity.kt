@@ -78,6 +78,8 @@ fun GymProgressApp(viewModel: WorkoutViewModel = viewModel()) {
     val selectedExerciseType by viewModel.selectedExerciseType.collectAsState()
     val trainerSettings by viewModel.trainerSettings.collectAsState()
     val workoutRecommendation by viewModel.workoutRecommendation.collectAsState()
+    val aiAdvice by viewModel.aiAdvice.collectAsState()
+    val aiLoading by viewModel.aiLoading.collectAsState()
 
     if (showSettings) {
         BackHandler { showSettings = false }
@@ -155,6 +157,10 @@ fun GymProgressApp(viewModel: WorkoutViewModel = viewModel()) {
                 showTrainer = false
                 showActiveWorkout = true
             },
+            isAiAvailable = viewModel.isAiAvailable,
+            aiAdvice = aiAdvice,
+            aiLoading = aiLoading,
+            onAskAi = { viewModel.askAi() },
             modifier = Modifier.fillMaxSize()
         )
         return
