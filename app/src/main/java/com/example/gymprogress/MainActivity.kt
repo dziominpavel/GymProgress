@@ -2,6 +2,7 @@ package com.example.gymprogress
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Box
@@ -79,6 +80,7 @@ fun GymProgressApp(viewModel: WorkoutViewModel = viewModel()) {
     val workoutRecommendation by viewModel.workoutRecommendation.collectAsState()
 
     if (showSettings) {
+        BackHandler { showSettings = false }
         SettingsScreen(
             currentGoal = trainingGoal,
             onGoalChanged = { viewModel.setTrainingGoal(it) },
@@ -89,6 +91,7 @@ fun GymProgressApp(viewModel: WorkoutViewModel = viewModel()) {
     }
 
     if (showAbout) {
+        BackHandler { showAbout = false }
         AboutScreen(
             onBack = { showAbout = false },
             modifier = Modifier.fillMaxSize()
@@ -97,6 +100,10 @@ fun GymProgressApp(viewModel: WorkoutViewModel = viewModel()) {
     }
 
     if (showTrainerSettings) {
+        BackHandler {
+            viewModel.updateTrainerSettings(trainerSettings)
+            showTrainerSettings = false
+        }
         TrainerSettingsScreen(
             settings = trainerSettings,
             onSettingsChanged = { viewModel.updateTrainerSettings(it) },
@@ -114,6 +121,10 @@ fun GymProgressApp(viewModel: WorkoutViewModel = viewModel()) {
     }
 
     if (showActiveWorkout && activeWorkoutRec != null) {
+        BackHandler {
+            showActiveWorkout = false
+            activeWorkoutRec = null
+        }
         ActiveWorkoutScreen(
             recommendation = activeWorkoutRec!!,
             onFinish = { completedSets ->
@@ -131,6 +142,7 @@ fun GymProgressApp(viewModel: WorkoutViewModel = viewModel()) {
     }
 
     if (showTrainer) {
+        BackHandler { showTrainer = false }
         TrainerScreen(
             recommendation = workoutRecommendation,
             onBack = { showTrainer = false },

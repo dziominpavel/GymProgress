@@ -34,5 +34,6 @@ data class WorkoutRecommendation(
     val dayIndex: Int,
     val muscleGroups: List<MuscleGroup>,
     val exercises: List<ExerciseRecommendation>,
-    val isDeloadWeek: Boolean = false
+    val isDeloadWeek: Boolean = false,
+    val missingGroups: List<MuscleGroup> = emptyList()
 )

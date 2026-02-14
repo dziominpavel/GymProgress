@@ -13,28 +13,46 @@ class TrainerRecommendationEngine {
         exercises: List<Exercise>,
         history: List<WorkoutEntry>
     ): WorkoutRecommendation {
-        val nextDayIndex = determineNextDayIndex(settings, history, exercises)
-        val muscleGroups = getMuscleGroupsForDay(settings, nextDayIndex)
-        val dayLabel = getDayLabel(settings, nextDayIndex)
+        val preferredDayIndex = determineNextDayIndex(settings, history, exercises)
+        val totalDays = getTotalDays(settings)
         val isDeload = shouldDeload(settings, history)
 
-        val exerciseRecs = buildExerciseList(
-            muscleGroups = muscleGroups,
-            priorityGroups = settings.priorityGroups,
-            exercises = exercises,
-            history = history,
-            trainingGoal = trainingGoal,
-            progressionType = settings.progressionType,
-            includeWarmup = settings.includeWarmup,
-            isDeload = isDeload
-        )
+        var bestDayIndex = preferredDayIndex
+        var bestExerciseRecs: List<ExerciseRecommendation> = emptyList()
+
+        for (offset in 0 until totalDays) {
+            val dayIndex = (preferredDayIndex + offset) % totalDays
+            val muscleGroups = getMuscleGroupsForDay(settings, dayIndex)
+            val recs = buildExerciseList(
+                muscleGroups = muscleGroups,
+                priorityGroups = settings.priorityGroups,
+                exercises = exercises,
+                history = history,
+                trainingGoal = trainingGoal,
+                progressionType = settings.progressionType,
+                includeWarmup = settings.includeWarmup,
+                isDeload = isDeload
+            )
+            if (recs.isNotEmpty()) {
+                bestDayIndex = dayIndex
+                bestExerciseRecs = recs
+                break
+            }
+        }
+
+        val muscleGroups = getMuscleGroupsForDay(settings, bestDayIndex)
+        val dayLabel = getDayLabel(settings, bestDayIndex)
+
+        val coveredGroups = bestExerciseRecs.map { it.exercise.muscleGroup }.toSet()
+        val missingGroups = muscleGroups.filter { it.name !in coveredGroups }
 
         return WorkoutRecommendation(
             dayLabel = dayLabel,
-            dayIndex = nextDayIndex,
+            dayIndex = bestDayIndex,
             muscleGroups = muscleGroups,
-            exercises = exerciseRecs,
-            isDeloadWeek = isDeload
+            exercises = bestExerciseRecs,
+            isDeloadWeek = isDeload,
+            missingGroups = missingGroups
         )
     }
 
@@ -49,6 +67,15 @@ class TrainerRecommendationEngine {
         }
     }
 
+    private fun getTotalDays(settings: TrainerSettings): Int {
+        return when (settings.splitType) {
+            SplitType.FULL_BODY -> 1
+            SplitType.UPPER_LOWER -> 2
+            SplitType.PUSH_PULL_LEGS -> 3
+            SplitType.CUSTOM -> settings.customSplitDays.size.coerceAtLeast(1)
+        }
+    }
+
     private fun determineNextDayIndex(
         settings: TrainerSettings,
         history: List<WorkoutEntry>,
@@ -56,12 +83,7 @@ class TrainerRecommendationEngine {
     ): Int {
         if (history.isEmpty()) return 0
 
-        val totalDays = when (settings.splitType) {
-            SplitType.FULL_BODY -> 1
-            SplitType.UPPER_LOWER -> 2
-            SplitType.PUSH_PULL_LEGS -> 3
-            SplitType.CUSTOM -> settings.customSplitDays.size.coerceAtLeast(1)
-        }
+        val totalDays = getTotalDays(settings)
         if (totalDays == 1) return 0
 
         val lastDate = history.maxOfOrNull { parseDate(it.date) } ?: return 0
@@ -88,12 +110,7 @@ class TrainerRecommendationEngine {
 
         if (usedGroups.isEmpty()) return 0
 
-        val totalDays = when (settings.splitType) {
-            SplitType.FULL_BODY -> 1
-            SplitType.UPPER_LOWER -> 2
-            SplitType.PUSH_PULL_LEGS -> 3
-            SplitType.CUSTOM -> settings.customSplitDays.size.coerceAtLeast(1)
-        }
+        val totalDays = getTotalDays(settings)
 
         var bestDay = 0
         var bestOverlap = 0

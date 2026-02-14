@@ -112,21 +112,33 @@ fun TrainerScreen(
             )
             Spacer(modifier = Modifier.height(Spacing.md))
 
-            if (recommendation == null || recommendation.exercises.isEmpty()) {
-                EmptyTrainerState()
-            } else {
-                LazyColumn(
-                    verticalArrangement = Arrangement.spacedBy(Spacing.sm)
-                ) {
-                    item {
-                        NextWorkoutHeader(recommendation)
-                    }
+            when {
+                recommendation == null -> {
+                    EmptyTrainerState(missingGroups = emptyList())
+                }
+                recommendation.exercises.isEmpty() -> {
+                    EmptyTrainerState(missingGroups = recommendation.missingGroups)
+                }
+                else -> {
+                    LazyColumn(
+                        verticalArrangement = Arrangement.spacedBy(Spacing.sm)
+                    ) {
+                        item {
+                            NextWorkoutHeader(recommendation)
+                        }
 
-                    items(recommendation.exercises) { exerciseRec ->
-                        ExerciseRecCard(exerciseRec)
-                    }
+                        if (recommendation.missingGroups.isNotEmpty()) {
+                            item {
+                                MissingGroupsHint(recommendation.missingGroups)
+                            }
+                        }
 
-                    item { Spacer(modifier = Modifier.height(80.dp)) }
+                        items(recommendation.exercises) { exerciseRec ->
+                            ExerciseRecCard(exerciseRec)
+                        }
+
+                        item { Spacer(modifier = Modifier.height(80.dp)) }
+                    }
                 }
             }
         }
@@ -134,7 +146,7 @@ fun TrainerScreen(
 }
 
 @Composable
-private fun EmptyTrainerState() {
+private fun EmptyTrainerState(missingGroups: List<MuscleGroup>) {
     Box(
         modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.Center
@@ -156,19 +168,70 @@ private fun EmptyTrainerState() {
                 )
             }
             Spacer(modifier = Modifier.height(Spacing.lg))
+            if (missingGroups.isNotEmpty()) {
+                Text(
+                    "Не хватает упражнений",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    textAlign = TextAlign.Center
+                )
+                Spacer(modifier = Modifier.height(Spacing.xxs))
+                Text(
+                    "Добавьте упражнения для групп: ${missingGroups.joinToString(", ") { it.displayName }}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center
+                )
+                Spacer(modifier = Modifier.height(Spacing.xs))
+                Text(
+                    "Вкладка «Упражнения» → нажмите +",
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.Medium,
+                    color = Volt,
+                    textAlign = TextAlign.Center
+                )
+            } else {
+                Text(
+                    "Нет рекомендаций",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    textAlign = TextAlign.Center
+                )
+                Spacer(modifier = Modifier.height(Spacing.xxs))
+                Text(
+                    "Добавьте упражнения на вкладке «Упражнения», и тренер составит для вас план",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun MissingGroupsHint(missingGroups: List<MuscleGroup>) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f)
+        ),
+        shape = CardShape
+    ) {
+        Column(modifier = Modifier.padding(Spacing.md)) {
             Text(
-                "Нет рекомендаций",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface,
-                textAlign = TextAlign.Center
+                text = "Нет упражнений для: ${missingGroups.joinToString(", ") { it.displayName }}",
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurface
             )
             Spacer(modifier = Modifier.height(Spacing.xxs))
             Text(
-                "Добавьте упражнения на вкладке «Упражнения», и тренер составит для вас план",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center
+                text = "Добавьте их на вкладке «Упражнения», чтобы получить полный план",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }

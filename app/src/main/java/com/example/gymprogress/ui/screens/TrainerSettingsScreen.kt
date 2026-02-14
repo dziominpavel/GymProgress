@@ -204,8 +204,8 @@ fun TrainerSettingsScreen(
             Spacer(modifier = Modifier.height(Spacing.xl))
 
             // ── Тип прогрессии ──
-            SectionTitle("Тип прогрессии")
-            SectionSubtitle("Как увеличивать нагрузку")
+            SectionTitle("Как увеличивать вес")
+            SectionSubtitle("Тренер подскажет, когда пора добавить вес на снаряд")
             Spacer(modifier = Modifier.height(Spacing.sm))
 
             ProgressionType.entries.forEach { prog ->
