@@ -56,6 +56,9 @@ class WorkoutViewModel(application: Application) : AndroidViewModel(application)
     val trainingGoal: StateFlow<TrainingGoal> = settingsRepository.trainingGoal
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), TrainingGoal.HYPERTROPHY)
 
+    val bodyWeightKg: StateFlow<Double?> = settingsRepository.bodyWeightKg
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
     val trainerSettings: StateFlow<TrainerSettings> = settingsRepository.trainerSettings
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), TrainerSettings())
 
@@ -130,11 +133,21 @@ class WorkoutViewModel(application: Application) : AndroidViewModel(application)
         _selectedExercise.value = name
     }
 
-    fun addExercise(name: String, muscleGroup: String, exerciseType: String = ExerciseType.COMPOUND.name) {
+    fun addExercise(
+        name: String,
+        muscleGroup: String,
+        exerciseType: String = ExerciseType.COMPOUND.name,
+        isBodyweight: Boolean = false
+    ) {
         viewModelScope.launch {
             try {
                 exerciseDao.insert(
-                    Exercise(name = name.trim(), muscleGroup = muscleGroup, exerciseType = exerciseType)
+                    Exercise(
+                        name = name.trim(),
+                        muscleGroup = muscleGroup,
+                        exerciseType = exerciseType,
+                        isBodyweight = isBodyweight
+                    )
                 )
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to add exercise", e)
@@ -168,6 +181,16 @@ class WorkoutViewModel(application: Application) : AndroidViewModel(application)
                 settingsRepository.setTrainingGoal(goal)
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to set training goal", e)
+            }
+        }
+    }
+
+    fun setBodyWeightKg(value: Double?) {
+        viewModelScope.launch {
+            try {
+                settingsRepository.setBodyWeightKg(value)
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to set body weight", e)
             }
         }
     }

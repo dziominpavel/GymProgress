@@ -12,5 +12,6 @@ data class Exercise(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val name: String,
     val muscleGroup: String,
-    val exerciseType: String = ExerciseType.COMPOUND.name
+    val exerciseType: String = ExerciseType.COMPOUND.name,
+    val isBodyweight: Boolean = false
 )

@@ -202,6 +202,7 @@ class TrainerRecommendationEngine {
     ): List<ExerciseRecommendation> {
         val result = mutableListOf<ExerciseRecommendation>()
         val lastSessionNames = getLastSessionExercises(muscleGroups, exercises, history)
+        val lastSessionDate = getLastSessionDate(muscleGroups, exercises, history)
 
         for (group in muscleGroups) {
             val groupExercises = exercises.filter { it.muscleGroup == group.name }
@@ -215,7 +216,17 @@ class TrainerRecommendationEngine {
             }
 
             for (ex in selected) {
-                result.add(buildExerciseRec(ex, history, trainingGoal, progressionType, includeWarmup, isDeload))
+                result.add(
+                    buildExerciseRec(
+                        exercise = ex,
+                        history = history,
+                        trainingGoal = trainingGoal,
+                        progressionType = progressionType,
+                        includeWarmup = includeWarmup,
+                        isDeload = isDeload,
+                        lastSessionDate = lastSessionDate
+                    )
+                )
             }
         }
 
@@ -247,27 +258,45 @@ class TrainerRecommendationEngine {
             .toSet()
     }
 
+    private fun getLastSessionDate(
+        muscleGroups: List<MuscleGroup>,
+        exercises: List<Exercise>,
+        history: List<WorkoutEntry>
+    ): String? {
+        if (history.isEmpty()) return null
+
+        val groupNames = muscleGroups.map { it.name }.toSet()
+        val relevantExerciseNames = exercises
+            .filter { it.muscleGroup in groupNames }
+            .map { it.name }
+            .toSet()
+
+        val relevantHistory = history.filter { it.exerciseName in relevantExerciseNames }
+        val lastEntry = relevantHistory.maxByOrNull { parseDate(it.date) } ?: return null
+        return lastEntry.date
+    }
+
     private fun buildExerciseRec(
         exercise: Exercise,
         history: List<WorkoutEntry>,
         trainingGoal: TrainingGoal,
         progressionType: ProgressionType,
         includeWarmup: Boolean,
-        isDeload: Boolean
+        isDeload: Boolean,
+        lastSessionDate: String?
     ): ExerciseRecommendation {
-        val recentEntries = history
+        val exerciseHistory = history
             .filter { it.exerciseName == exercise.name }
             .sortedByDescending { it.date }
-            .take(3)
 
         val isCompound = exercise.exerciseType == ExerciseType.COMPOUND.name
         val weightStep = if (isCompound) 2.5 else 1.25
         val targetRange = trainingGoal.targetRange
-        val workingSets = 3
         val restSeconds = getRestSeconds(trainingGoal, isCompound)
 
-        if (recentEntries.isEmpty()) {
-            val sets = (1..workingSets).map {
+        if (exerciseHistory.isEmpty()) {
+            val baseWorkingSets = 3
+            val sets = (1..baseWorkingSets).map {
                 SetRecommendation(
                     type = SetType.WORKING,
                     weight = null,
@@ -278,13 +307,23 @@ class TrainerRecommendationEngine {
             return ExerciseRecommendation(
                 exercise = exercise,
                 sets = sets,
-                note = "Первый раз — определите рабочий вес"
+                note = "Первый раз — определите рабочий вес",
+                advice = "Начните в диапазоне ${targetRange.first}–${targetRange.last} повторов"
             )
         }
 
-        val lastEntry = recentEntries.first()
+        val lastEntry = exerciseHistory.firstOrNull { it.date == lastSessionDate }
+            ?: exerciseHistory.first()
         val lastWeight = lastEntry.weight
         val lastReps = parseReps(lastEntry.reps)
+
+        val exerciseType = ExerciseType.entries
+            .find { it.name == exercise.exerciseType } ?: ExerciseType.COMPOUND
+        val bestEntry = exerciseHistory.maxByOrNull {
+            WorkoutScoreCalculator
+                .calcSessionScore(it, exerciseHistory, trainingGoal, exerciseType)
+                .score
+        }
 
         val (suggestedWeight, note) = calculateProgression(
             lastWeight = lastWeight,
@@ -293,6 +332,20 @@ class TrainerRecommendationEngine {
             weightStep = weightStep,
             progressionType = progressionType,
             isDeload = isDeload
+        )
+
+        val progressSnapshot = buildProgressSnapshot(
+            lastEntry = lastEntry,
+            previousEntry = exerciseHistory.getOrNull(1),
+            history = exerciseHistory,
+            trainingGoal = trainingGoal,
+            exerciseType = exerciseType,
+            targetRange = targetRange
+        )
+
+        val (workingSets, volumeNote) = determineWorkingSets(
+            isDeload = isDeload,
+            snapshot = progressSnapshot
         )
 
         val warmupSets = if (includeWarmup && isCompound && suggestedWeight >= 20.0) {
@@ -310,11 +363,135 @@ class TrainerRecommendationEngine {
             )
         }
 
+        val advice = buildAdvice(
+            lastEntry = lastEntry,
+            bestEntry = bestEntry,
+            history = exerciseHistory,
+            trainingGoal = trainingGoal,
+            exerciseType = exerciseType,
+            weightStep = weightStep,
+            snapshot = progressSnapshot,
+            volumeNote = volumeNote
+        )
+
         return ExerciseRecommendation(
             exercise = exercise,
             sets = warmupSets + workingSetsList,
-            note = note
+            note = note,
+            lastEntry = lastEntry,
+            bestEntry = bestEntry,
+            advice = advice
         )
+    }
+
+    private fun buildAdvice(
+        lastEntry: WorkoutEntry,
+        bestEntry: WorkoutEntry?,
+        history: List<WorkoutEntry>,
+        trainingGoal: TrainingGoal,
+        exerciseType: ExerciseType,
+        weightStep: Double,
+        snapshot: ProgressSnapshot,
+        volumeNote: String?
+    ): String? {
+        if (bestEntry == null) return null
+
+        val lastScore = WorkoutScoreCalculator
+            .calcSessionScore(lastEntry, history, trainingGoal, exerciseType)
+            .score
+        val bestScore = WorkoutScoreCalculator
+            .calcSessionScore(bestEntry, history, trainingGoal, exerciseType)
+            .score
+
+        val lastReps = parseReps(lastEntry.reps)
+        val targetRange = trainingGoal.targetRange
+
+        val baseAdvice = if (bestEntry.id == lastEntry.id) {
+            if (lastReps.isNotEmpty() && lastReps.all { it in targetRange }) {
+                "Попробуйте +${FormatUtils.formatWeight(weightStep)} кг при тех же повторах"
+            } else {
+                "Цель: +1 повтор в последнем подходе"
+            }
+        } else if (bestScore - lastScore >= 0.08) {
+            val bestReps = parseReps(bestEntry.reps)
+            val repsLabel = if (bestReps.isNotEmpty()) bestReps.joinToString(" · ") else ""
+            if (repsLabel.isNotEmpty()) {
+                "Ориентир: ${FormatUtils.formatWeight(bestEntry.weight)} кг и $repsLabel повт."
+            } else {
+                "Ориентир: ${FormatUtils.formatWeight(bestEntry.weight)} кг"
+            }
+        } else if (snapshot.isStagnating && snapshot.isStableInRange) {
+            "Если 2 тренировки без прогресса — откатите вес на 5% и вернитесь"
+        } else {
+            "Сделайте чуть лучше прошлой: +1 повтор или +${FormatUtils.formatWeight(weightStep)} кг"
+        }
+
+        return listOfNotNull(baseAdvice, volumeNote).joinToString(" • ")
+    }
+
+    private data class ProgressSnapshot(
+        val lastScore: SessionScore,
+        val previousScore: SessionScore?,
+        val isStableInRange: Boolean,
+        val isLowFatigue: Boolean,
+        val isHighFatigue: Boolean,
+        val isStagnating: Boolean,
+        val isImproving: Boolean
+    )
+
+    private fun buildProgressSnapshot(
+        lastEntry: WorkoutEntry,
+        previousEntry: WorkoutEntry?,
+        history: List<WorkoutEntry>,
+        trainingGoal: TrainingGoal,
+        exerciseType: ExerciseType,
+        targetRange: IntRange
+    ): ProgressSnapshot {
+        val lastScore = WorkoutScoreCalculator.calcSessionScore(
+            lastEntry,
+            history,
+            trainingGoal,
+            exerciseType
+        )
+        val previousScore = previousEntry?.let {
+            WorkoutScoreCalculator.calcSessionScore(
+                it,
+                history,
+                trainingGoal,
+                exerciseType
+            )
+        }
+
+        val lastReps = parseReps(lastEntry.reps)
+        val isStableInRange = lastReps.isNotEmpty() && lastReps.all { it in targetRange }
+        val isLowFatigue = lastScore.fatiguePenalty <= 0.07
+        val isHighFatigue = lastScore.fatiguePenalty >= 0.12 || lastScore.repQuality < 0.6
+        val isImproving = previousScore != null && lastScore.score - previousScore.score >= 0.02
+        val isStagnating = previousScore != null && kotlin.math.abs(lastScore.score - previousScore.score) < 0.01
+
+        return ProgressSnapshot(
+            lastScore = lastScore,
+            previousScore = previousScore,
+            isStableInRange = isStableInRange,
+            isLowFatigue = isLowFatigue,
+            isHighFatigue = isHighFatigue,
+            isStagnating = isStagnating,
+            isImproving = isImproving
+        )
+    }
+
+    private fun determineWorkingSets(
+        isDeload: Boolean,
+        snapshot: ProgressSnapshot
+    ): Pair<Int, String?> {
+        if (isDeload) return 2 to "Deload: 2 рабочих подхода"
+
+        return when {
+            snapshot.isHighFatigue && !snapshot.isImproving -> 2 to "Снижаем объём до 2 подходов для восстановления"
+            snapshot.isImproving && snapshot.isStableInRange && snapshot.isLowFatigue ->
+                4 to "Можно добавить 4-й рабочий подход"
+            else -> 3 to null
+        }
     }
 
     private fun calculateProgression(

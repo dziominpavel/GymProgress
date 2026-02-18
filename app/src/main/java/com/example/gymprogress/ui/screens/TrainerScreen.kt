@@ -47,6 +47,7 @@ import com.example.gymprogress.data.MuscleGroup
 import com.example.gymprogress.data.SetType
 import com.example.gymprogress.data.WorkoutRecommendation
 import com.example.gymprogress.data.FormatUtils
+import com.example.gymprogress.data.WorkoutEntry
 import com.example.gymprogress.ui.theme.CardShape
 import com.example.gymprogress.ui.theme.FabShape
 import com.example.gymprogress.ui.theme.Spacing
@@ -373,67 +374,81 @@ private fun ExerciseRecCard(rec: ExerciseRecommendation) {
 
             Spacer(modifier = Modifier.height(Spacing.sm))
 
-            rec.sets.forEach { set ->
-                val isWarmup = set.type == SetType.WARMUP
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 2.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(4.dp))
-                            .background(
-                                if (isWarmup) MaterialTheme.colorScheme.surfaceVariant
-                                else Volt.copy(alpha = 0.12f)
-                            )
-                            .padding(horizontal = Spacing.xs, vertical = 2.dp)
-                            .width(65.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = set.type.displayName,
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = if (isWarmup) MaterialTheme.colorScheme.onSurfaceVariant
-                            else Volt
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(Spacing.sm))
-                    Text(
-                        text = if (set.weight != null) "${FormatUtils.formatWeight(set.weight)} кг"
-                        else "—",
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.width(70.dp)
-                    )
-                    Text(
-                        text = "${set.targetReps.first}–${set.targetReps.last} повт.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.weight(1f)
-                    )
-                    Text(
-                        text = FormatUtils.formatRest(set.restSeconds),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
+            Text(
+                text = "Прошлая тренировка",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(Spacing.xxs))
+            Text(
+                text = rec.lastEntry?.let { formatEntrySummary(it) } ?: "Нет данных",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface
+            )
 
+            Spacer(modifier = Modifier.height(Spacing.xs))
+            Text(
+                text = "Лучшая тренировка",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(Spacing.xxs))
+            Text(
+                text = rec.bestEntry?.let { formatEntrySummary(it) } ?: "Нет данных",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+
+            Spacer(modifier = Modifier.height(Spacing.xs))
+            Text(
+                text = "Следующая тренировка",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(Spacing.xxs))
+            Text(
+                text = formatRecommendationSummary(rec),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface
+            )
             rec.note?.let { note ->
-                Spacer(modifier = Modifier.height(Spacing.xs))
+                Spacer(modifier = Modifier.height(Spacing.xxs))
                 Text(
                     text = note,
                     style = MaterialTheme.typography.bodySmall,
-                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            rec.advice?.let { advice ->
+                Spacer(modifier = Modifier.height(Spacing.xxs))
+                Text(
+                    text = advice,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.SemiBold,
                     color = Volt
                 )
             }
         }
     }
+}
+
+private fun formatEntrySummary(entry: WorkoutEntry): String {
+    val reps = entry.reps.split(",")
+        .map { it.trim() }
+        .filter { it.isNotEmpty() }
+    val repsLabel = if (reps.isNotEmpty()) " • ${reps.joinToString(" · ")}" else ""
+    return "${FormatUtils.formatWeight(entry.weight)} кг${repsLabel} • ${FormatUtils.formatDate(entry.date)}"
+}
+
+private fun formatRecommendationSummary(rec: ExerciseRecommendation): String {
+    val workingSets = rec.sets.filter { it.type == SetType.WORKING }
+    val template = workingSets.firstOrNull()
+    val reps = template?.targetReps?.let { "${it.first}–${it.last} повт." } ?: "повторы подобрать"
+    val weight = template?.weight?.let { "${FormatUtils.formatWeight(it)} кг" } ?: "вес подобрать"
+    return "${workingSets.size}× • $weight • $reps"
 }
 
 @Composable

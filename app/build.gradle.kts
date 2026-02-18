@@ -2,6 +2,12 @@ import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Properties
 
+val shouldBumpPatch = gradle.startParameter.taskNames.any { taskName ->
+    taskName.contains("assemble", ignoreCase = true) ||
+        taskName.contains("install", ignoreCase = true) ||
+        taskName.contains("bundle", ignoreCase = true)
+}
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -18,13 +24,42 @@ android {
         applicationId = "com.example.gymprogress"
         minSdk = 29
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0"
+
+        val versionPropsFile = rootProject.file("version.properties")
+        if (!versionPropsFile.exists()) {
+            val defaults = Properties().apply {
+                setProperty("VERSION_MAJOR", "1")
+                setProperty("VERSION_MINOR", "0")
+                setProperty("VERSION_PATCH", "0")
+            }
+            versionPropsFile.parentFile?.mkdirs()
+            versionPropsFile.outputStream().use { defaults.store(it, null) }
+        }
+        val versionProps = Properties().apply {
+            versionPropsFile.inputStream().use { load(it) }
+        }
+
+        val major = versionProps.getProperty("VERSION_MAJOR", "1").toInt()
+        val minor = versionProps.getProperty("VERSION_MINOR", "0").toInt()
+        var patch = versionProps.getProperty("VERSION_PATCH", "0").toInt()
+
+        if (shouldBumpPatch) {
+            patch += 1
+            versionProps.setProperty("VERSION_PATCH", patch.toString())
+            versionPropsFile.outputStream().use { versionProps.store(it, null) }
+        }
+
+        versionCode = 2_000_000_000 + (major * 10000) + (minor * 100) + patch
+        versionName = "$major.$minor.$patch"
+
+        buildConfigField("int", "VERSION_CODE", versionCode.toString())
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         val buildDate = LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm"))
         buildConfigField("String", "BUILD_DATE", "\"$buildDate\"")
+
+        logger.lifecycle("[GymProgress] versionName=$versionName, versionCode=$versionCode, buildDate=$buildDate")
 
         val localProps = Properties()
         val localPropsFile = rootProject.file("local.properties")

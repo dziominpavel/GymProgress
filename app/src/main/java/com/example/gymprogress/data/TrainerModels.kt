@@ -26,7 +26,10 @@ data class SetRecommendation(
 data class ExerciseRecommendation(
     val exercise: Exercise,
     val sets: List<SetRecommendation>,
-    val note: String?
+    val note: String?,
+    val lastEntry: WorkoutEntry? = null,
+    val bestEntry: WorkoutEntry? = null,
+    val advice: String? = null
 )
 
 data class WorkoutRecommendation(

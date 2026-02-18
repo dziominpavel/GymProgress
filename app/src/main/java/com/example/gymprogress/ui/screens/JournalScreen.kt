@@ -67,6 +67,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.example.gymprogress.data.Exercise
 import com.example.gymprogress.data.FormatUtils
 import com.example.gymprogress.data.WorkoutEntry
 import com.example.gymprogress.ui.theme.CardShape
@@ -83,6 +84,8 @@ import kotlinx.coroutines.launch
 @Composable
 fun JournalScreen(
     entries: List<WorkoutEntry>,
+    exercises: List<Exercise>,
+    bodyWeightKg: Double?,
     onAddClick: () -> Unit,
     onDeleteEntry: (WorkoutEntry) -> Unit,
     onUpdateEntry: (WorkoutEntry) -> Unit,
@@ -301,6 +304,8 @@ fun JournalScreen(
     entryToEdit?.let { entry ->
         EditEntryDialog(
             entry = entry,
+            exercises = exercises,
+            bodyWeightKg = bodyWeightKg,
             onDismiss = { entryToEdit = null },
             onConfirm = { updated ->
                 onUpdateEntry(updated)
@@ -390,11 +395,17 @@ private fun WorkoutEntryCard(
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Spacer(modifier = Modifier.height(Spacing.xs))
+                    val reps = remember(entry.reps) {
+                        entry.reps.split(",")
+                            .map { it.trim() }
+                            .filter { it.isNotEmpty() }
+                    }
                     FlowRow(
+                        maxItemsInEachRow = 3,
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                         verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        entry.reps.split(",").forEachIndexed { index, rep ->
+                        reps.forEachIndexed { index, rep ->
                             Box(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(8.dp))
@@ -402,7 +413,7 @@ private fun WorkoutEntryCard(
                                     .padding(horizontal = 10.dp, vertical = 4.dp)
                             ) {
                                 Text(
-                                    text = "${index + 1}: ${rep.trim()} повт.",
+                                    text = "${index + 1}: ${rep} повт.",
                                     style = MaterialTheme.typography.labelSmall,
                                     fontWeight = FontWeight.SemiBold,
                                     color = MaterialTheme.colorScheme.onSurface
@@ -435,6 +446,8 @@ private fun parseEntryDateOrNull(date: String): LocalDate? {
 @Composable
 private fun EditEntryDialog(
     entry: WorkoutEntry,
+    exercises: List<Exercise>,
+    bodyWeightKg: Double?,
     onDismiss: () -> Unit,
     onConfirm: (WorkoutEntry) -> Unit
 ) {
@@ -447,12 +460,23 @@ private fun EditEntryDialog(
     var showDatePicker by remember { mutableStateOf(false) }
     var storageDate by remember(entry.id) { mutableStateOf(initialDate.format(storageFormatter)) }
     var displayDate by remember(entry.id) { mutableStateOf(initialDate.format(displayFormatter)) }
-    var weightText by remember { mutableStateOf(FormatUtils.formatWeight(entry.weight)) }
+    val isBodyweightExercise = remember(entry.exerciseName, exercises) {
+        exercises.firstOrNull { it.name == entry.exerciseName }?.isBodyweight == true
+    }
+    val initialWeightText = remember(entry.weight, bodyWeightKg, isBodyweightExercise) {
+        if (isBodyweightExercise && bodyWeightKg != null) {
+            FormatUtils.formatWeight(maxOf(0.0, entry.weight - bodyWeightKg))
+        } else {
+            FormatUtils.formatWeight(entry.weight)
+        }
+    }
+    var weightText by remember { mutableStateOf(initialWeightText) }
     val setReps = remember {
         mutableStateListOf(*entry.reps.split(",").map { it.trim() }.toTypedArray())
     }
     var weightError by remember { mutableStateOf(false) }
     var repsError by remember { mutableStateOf(false) }
+    var bodyWeightError by remember { mutableStateOf(false) }
 
     val scrollState = rememberScrollState()
 
@@ -512,16 +536,41 @@ private fun EditEntryDialog(
                             .clickable { showDatePicker = true }
                     )
 
+                    val weightLabel = if (isBodyweightExercise) "Доп. вес (кг)" else "Вес (кг)"
+                    val bodyWeightHint = if (isBodyweightExercise && bodyWeightKg != null) {
+                        "Вес тела: ${FormatUtils.formatWeight(bodyWeightKg)} кг"
+                    } else null
+                    val additionalWeightHint = if (isBodyweightExercise) {
+                        "Это ДОП. вес — итоговый вес = вес тела + доп. вес"
+                    } else null
+
                     OutlinedTextField(
                         value = weightText,
-                        onValueChange = { weightText = it; weightError = false },
-                        label = { Text("Вес (кг)") },
+                        onValueChange = { weightText = it; weightError = false; bodyWeightError = false },
+                        label = { Text(weightLabel) },
                         singleLine = true,
-                        isError = weightError,
+                        isError = weightError || bodyWeightError,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.fillMaxWidth()
                     )
+                    bodyWeightHint?.let {
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = it,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    additionalWeightHint?.let {
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = it,
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Volt
+                        )
+                    }
 
                     Text(
                         "Подходы",
@@ -576,19 +625,30 @@ private fun EditEntryDialog(
                 ) {
                     TextButton(onClick = onDismiss) { Text("Отмена") }
                     TextButton(onClick = {
-                        val weight = weightText.replace(",", ".").toDoubleOrNull()
-                        val isWeightValid = weight != null && weight > 0
+                        val weightInput = weightText.replace(",", ".").toDoubleOrNull()
+                        val isBodyWeightReady = !isBodyweightExercise || bodyWeightKg != null
+                        val isWeightValid = if (isBodyweightExercise) {
+                            weightInput != null && weightInput >= 0
+                        } else {
+                            weightInput != null && weightInput > 0
+                        }
                         val allRepsValid = setReps.all {
                             it.isNotBlank() && it.toIntOrNull() != null && it.toInt() > 0
                         }
                         weightError = !isWeightValid
+                        bodyWeightError = isBodyweightExercise && !isBodyWeightReady
                         repsError = !allRepsValid
 
-                        if (isWeightValid && allRepsValid) {
+                        if (isWeightValid && allRepsValid && isBodyWeightReady) {
+                            val finalWeight = if (isBodyweightExercise) {
+                                (bodyWeightKg ?: 0.0) + (weightInput ?: 0.0)
+                            } else {
+                                weightInput ?: 0.0
+                            }
                             onConfirm(
                                 entry.copy(
                                     date = storageDate,
-                                    weight = weight!!,
+                                    weight = finalWeight,
                                     reps = setReps.joinToString(",")
                                 )
                             )

@@ -38,6 +38,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -68,7 +69,7 @@ import com.example.gymprogress.ui.theme.Volt
 @Composable
 fun ExercisesScreen(
     exercises: List<Exercise>,
-    onAddExercise: (name: String, muscleGroup: String, exerciseType: String) -> Unit,
+    onAddExercise: (name: String, muscleGroup: String, exerciseType: String, isBodyweight: Boolean) -> Unit,
     onDeleteExercise: (Exercise) -> Unit,
     onUpdateExercise: (Exercise) -> Unit,
     modifier: Modifier = Modifier
@@ -202,8 +203,8 @@ fun ExercisesScreen(
         AddExerciseDialog(
             existingNames = exercises.map { it.name.lowercase() }.toSet(),
             onDismiss = { showAddDialog = false },
-            onConfirm = { name, group, type ->
-                onAddExercise(name, group, type)
+            onConfirm = { name, group, type, isBodyweight ->
+                onAddExercise(name, group, type, isBodyweight)
                 showAddDialog = false
             }
         )
@@ -377,11 +378,12 @@ private fun ExerciseItem(exercise: Exercise, onClick: () -> Unit, onDelete: () -
 private fun AddExerciseDialog(
     existingNames: Set<String> = emptySet(),
     onDismiss: () -> Unit,
-    onConfirm: (name: String, muscleGroup: String, exerciseType: String) -> Unit
+    onConfirm: (name: String, muscleGroup: String, exerciseType: String, isBodyweight: Boolean) -> Unit
 ) {
     var name by remember { mutableStateOf("") }
     var selectedGroup by remember { mutableStateOf<MuscleGroup?>(null) }
     var selectedType by remember { mutableStateOf(ExerciseType.COMPOUND) }
+    var isBodyweight by remember { mutableStateOf(false) }
     var expanded by remember { mutableStateOf(false) }
     var nameError by remember { mutableStateOf(false) }
     var nameDuplicateError by remember { mutableStateOf(false) }
@@ -469,6 +471,29 @@ private fun AddExerciseDialog(
                         )
                     }
                 }
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Собственный вес",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = "Подтягивания, брусья и т.д.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = isBodyweight,
+                        onCheckedChange = { isBodyweight = it }
+                    )
+                }
             }
         },
         confirmButton = {
@@ -477,7 +502,7 @@ private fun AddExerciseDialog(
                 nameDuplicateError = !nameError && name.trim().lowercase() in existingNames
                 groupError = selectedGroup == null
                 if (!nameError && !nameDuplicateError && !groupError) {
-                    onConfirm(name.trim(), selectedGroup!!.name, selectedType.name)
+                    onConfirm(name.trim(), selectedGroup!!.name, selectedType.name, isBodyweight)
                 }
             }) {
                 Text("Создать", fontWeight = FontWeight.Bold)
@@ -498,6 +523,7 @@ private fun EditExerciseDialog(
     val currentType = ExerciseType.entries
         .find { it.name == exercise.exerciseType } ?: ExerciseType.COMPOUND
     var selectedType by remember { mutableStateOf(currentType) }
+    var isBodyweight by remember { mutableStateOf(exercise.isBodyweight) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -532,11 +558,39 @@ private fun EditExerciseDialog(
                         )
                     }
                 }
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Собственный вес",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = "Подтягивания, брусья и т.д.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = isBodyweight,
+                        onCheckedChange = { isBodyweight = it }
+                    )
+                }
             }
         },
         confirmButton = {
             TextButton(onClick = {
-                onConfirm(exercise.copy(exerciseType = selectedType.name))
+                onConfirm(
+                    exercise.copy(
+                        exerciseType = selectedType.name,
+                        isBodyweight = isBodyweight
+                    )
+                )
             }) {
                 Text("Сохранить", fontWeight = FontWeight.Bold)
             }

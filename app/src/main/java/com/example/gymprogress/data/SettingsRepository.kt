@@ -24,6 +24,7 @@ class SettingsRepository(private val context: Context) {
     private val autoDeloadKey = booleanPreferencesKey("trainer_auto_deload")
     private val deloadIntervalKey = intPreferencesKey("trainer_deload_interval_weeks")
     private val progressionTypeKey = stringPreferencesKey("trainer_progression_type")
+    private val bodyWeightKey = stringPreferencesKey("body_weight_kg")
 
     val trainingGoal: Flow<TrainingGoal> = context.dataStore.data.map { prefs ->
         val name = prefs[goalKey] ?: TrainingGoal.HYPERTROPHY.name
@@ -33,6 +34,20 @@ class SettingsRepository(private val context: Context) {
     suspend fun setTrainingGoal(goal: TrainingGoal) {
         context.dataStore.edit { prefs ->
             prefs[goalKey] = goal.name
+        }
+    }
+
+    val bodyWeightKg: Flow<Double?> = context.dataStore.data.map { prefs ->
+        prefs[bodyWeightKey]?.toDoubleOrNull()?.takeIf { it > 0.0 }
+    }
+
+    suspend fun setBodyWeightKg(value: Double?) {
+        context.dataStore.edit { prefs ->
+            if (value == null || value <= 0.0) {
+                prefs.remove(bodyWeightKey)
+            } else {
+                prefs[bodyWeightKey] = value.toString()
+            }
         }
     }
 

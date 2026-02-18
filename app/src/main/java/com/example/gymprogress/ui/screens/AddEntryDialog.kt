@@ -1,5 +1,6 @@
 package com.example.gymprogress.ui.screens
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -46,13 +47,20 @@ import androidx.compose.runtime.setValue
 import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.example.gymprogress.data.Exercise
+import com.example.gymprogress.data.ExerciseType
+import com.example.gymprogress.data.FormatUtils
 import com.example.gymprogress.data.MuscleGroup
+import com.example.gymprogress.data.TrainingGoal
+import com.example.gymprogress.data.WorkoutEntry
+import com.example.gymprogress.data.WorkoutScoreCalculator
+import com.example.gymprogress.ui.theme.Volt
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -62,6 +70,9 @@ import java.time.format.DateTimeFormatter
 @Composable
 fun AddEntryDialog(
     exercises: List<Exercise>,
+    history: List<WorkoutEntry>,
+    trainingGoal: TrainingGoal,
+    bodyWeightKg: Double?,
     onDismiss: () -> Unit,
     onConfirm: (date: String, exerciseName: String, weight: Double, reps: String) -> Unit
 ) {
@@ -80,7 +91,32 @@ fun AddEntryDialog(
 
     var exerciseError by remember { mutableStateOf(false) }
     var weightError by remember { mutableStateOf(false) }
+    var bodyWeightError by remember { mutableStateOf(false) }
     var repsError by remember { mutableStateOf(false) }
+
+    val selectedExerciseType = remember(selectedExercise?.exerciseType) {
+        selectedExercise?.exerciseType?.let { typeName ->
+            ExerciseType.entries.find { it.name == typeName }
+        } ?: ExerciseType.COMPOUND
+    }
+    val exerciseHistory = remember(selectedExercise?.name, history) {
+        val name = selectedExercise?.name ?: return@remember emptyList()
+        history.filter { it.exerciseName == name }
+            .sortedByDescending { it.date }
+    }
+    val bestEntry = remember(exerciseHistory, trainingGoal, selectedExerciseType) {
+        exerciseHistory.maxByOrNull {
+            WorkoutScoreCalculator
+                .calcSessionScore(it, exerciseHistory, trainingGoal, selectedExerciseType)
+                .score
+        }
+    }
+    val bestReps = remember(bestEntry?.reps) {
+        bestEntry?.reps?.split(",")
+            ?.map { it.trim() }
+            ?.filter { it.isNotEmpty() }
+            ?: emptyList()
+    }
 
     val grouped = exercises.groupBy { it.muscleGroup }
 
@@ -217,20 +253,102 @@ fun AddEntryDialog(
                         }
                     }
 
+                    if (selectedExercise != null) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(MaterialTheme.colorScheme.surfaceVariant)
+                                .padding(12.dp)
+                        ) {
+                            Text(
+                                text = "Лучшая тренировка",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            if (bestEntry == null) {
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text(
+                                    text = "Пока нет данных по этому упражнению",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            } else {
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text(
+                                    text = "${FormatUtils.formatWeight(bestEntry.weight)} кг",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                if (bestReps.isNotEmpty()) {
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = "Подходы: ${bestReps.joinToString(" · ")}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = "Дата: ${FormatUtils.formatDate(bestEntry.date)}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+
+                    val isBodyweightExercise = selectedExercise?.isBodyweight == true
+                    val bodyWeightLabel = if (isBodyweightExercise) "Доп. вес (кг)" else "Вес (кг)"
+                    val bodyWeightHint = if (isBodyweightExercise && bodyWeightKg != null) {
+                        "Вес тела: ${FormatUtils.formatWeight(bodyWeightKg)} кг"
+                    } else null
+                    val additionalWeightHint = if (isBodyweightExercise) {
+                        "Это ДОП. вес — итоговый вес = вес тела + доп. вес"
+                    } else null
+
                     // Weight
                     OutlinedTextField(
                         value = weightText,
                         onValueChange = {
                             weightText = it
                             weightError = false
+                            bodyWeightError = false
                         },
-                        label = { Text("Вес (кг)") },
+                        label = { Text(bodyWeightLabel) },
                         singleLine = true,
-                        isError = weightError,
+                        isError = weightError || bodyWeightError,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.fillMaxWidth()
                     )
+                    bodyWeightHint?.let {
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = it,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    additionalWeightHint?.let {
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = it,
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Volt
+                        )
+                    }
+                    if (bodyWeightError) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Укажите вес тела в настройках",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
 
                     // Sets
                     Spacer(modifier = Modifier.height(4.dp))
@@ -292,21 +410,33 @@ fun AddEntryDialog(
                     }
                     TextButton(onClick = {
                         val isExerciseValid = selectedExercise != null
-                        val weight = weightText.replace(",", ".").toDoubleOrNull()
-                        val isWeightValid = weight != null && weight > 0
+                        val weightInput = weightText.replace(",", ".").toDoubleOrNull()
+                        val isBodyweightExercise = selectedExercise?.isBodyweight == true
+                        val isBodyWeightReady = !isBodyweightExercise || bodyWeightKg != null
+                        val isWeightValid = if (isBodyweightExercise) {
+                            weightInput != null && weightInput >= 0
+                        } else {
+                            weightInput != null && weightInput > 0
+                        }
                         val allRepsValid = setReps.all {
                             it.isNotBlank() && it.toIntOrNull() != null && it.toInt() > 0
                         }
 
                         exerciseError = !isExerciseValid
                         weightError = !isWeightValid
+                        bodyWeightError = isBodyweightExercise && !isBodyWeightReady
                         repsError = !allRepsValid
 
-                        if (isExerciseValid && isWeightValid && allRepsValid) {
+                        if (isExerciseValid && isWeightValid && allRepsValid && isBodyWeightReady) {
+                            val finalWeight = if (isBodyweightExercise) {
+                                (bodyWeightKg ?: 0.0) + (weightInput ?: 0.0)
+                            } else {
+                                weightInput ?: 0.0
+                            }
                             onConfirm(
                                 storageDate,
                                 selectedExercise!!.name,
-                                weight!!,
+                                finalWeight,
                                 setReps.joinToString(",")
                             )
                         }

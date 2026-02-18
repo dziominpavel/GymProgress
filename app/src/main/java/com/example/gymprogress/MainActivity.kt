@@ -75,6 +75,7 @@ fun GymProgressApp(viewModel: WorkoutViewModel = viewModel()) {
     val entriesForExercise by viewModel.entriesForSelectedExercise.collectAsState()
     val allExercises by viewModel.allExercises.collectAsState()
     val trainingGoal by viewModel.trainingGoal.collectAsState()
+    val bodyWeightKg by viewModel.bodyWeightKg.collectAsState()
     val selectedExerciseType by viewModel.selectedExerciseType.collectAsState()
     val trainerSettings by viewModel.trainerSettings.collectAsState()
     val workoutRecommendation by viewModel.workoutRecommendation.collectAsState()
@@ -85,7 +86,9 @@ fun GymProgressApp(viewModel: WorkoutViewModel = viewModel()) {
         BackHandler { showSettings = false }
         SettingsScreen(
             currentGoal = trainingGoal,
+            bodyWeightKg = bodyWeightKg,
             onGoalChanged = { viewModel.setTrainingGoal(it) },
+            onBodyWeightChanged = { viewModel.setBodyWeightKg(it) },
             onBack = { showSettings = false },
             modifier = Modifier.fillMaxSize()
         )
@@ -241,6 +244,8 @@ fun GymProgressApp(viewModel: WorkoutViewModel = viewModel()) {
             AppDestinations.JOURNAL -> {
                 JournalScreen(
                     entries = entries,
+                    exercises = allExercises,
+                    bodyWeightKg = bodyWeightKg,
                     onAddClick = { showAddDialog = true },
                     onDeleteEntry = { viewModel.deleteEntry(it) },
                     onUpdateEntry = { viewModel.updateEntry(it) },
@@ -250,7 +255,9 @@ fun GymProgressApp(viewModel: WorkoutViewModel = viewModel()) {
             AppDestinations.EXERCISES -> {
                 ExercisesScreen(
                     exercises = allExercises,
-                    onAddExercise = { name, group, type -> viewModel.addExercise(name, group, type) },
+                    onAddExercise = { name, group, type, isBodyweight ->
+                        viewModel.addExercise(name, group, type, isBodyweight)
+                    },
                     onDeleteExercise = { viewModel.deleteExercise(it) },
                     onUpdateExercise = { viewModel.updateExercise(it) },
                     modifier = Modifier.fillMaxSize()
@@ -273,6 +280,9 @@ fun GymProgressApp(viewModel: WorkoutViewModel = viewModel()) {
     if (showAddDialog) {
         AddEntryDialog(
             exercises = allExercises,
+            history = entries,
+            trainingGoal = trainingGoal,
+            bodyWeightKg = bodyWeightKg,
             onDismiss = { showAddDialog = false },
             onConfirm = { date, name, weight, reps ->
                 viewModel.addEntry(date, name, weight, reps)
@@ -318,7 +328,7 @@ enum class AppDestinations(
     val icon: ImageVector,
 ) {
     JOURNAL("Журнал", Icons.Default.DateRange),
+    STATS("Прогресс", Icons.Default.Star),
     @Suppress("DEPRECATION")
     EXERCISES("Упражнения", Icons.Default.List),
-    STATS("Прогресс", Icons.Default.Star),
 }

@@ -104,7 +104,7 @@ fun AboutScreen(
                 )
                 Spacer(modifier = Modifier.height(Spacing.xxs))
                 Text(
-                    text = "Версия ${AppVersion.NAME}",
+                    text = "Версия ${AppVersion.NAME} (${AppVersion.CODE})",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
