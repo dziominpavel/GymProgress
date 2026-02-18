@@ -258,7 +258,7 @@ fun GymProgressApp(viewModel: WorkoutViewModel = viewModel()) {
             }
             AppDestinations.STATS -> {
                 StatsScreen(
-                    exerciseNames = exerciseNames,
+                    exercises = allExercises,
                     selectedExercise = selectedExercise,
                     entriesForExercise = entriesForExercise,
                     onExerciseSelected = { viewModel.selectExercise(it) },

@@ -4,6 +4,7 @@ import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -25,16 +26,20 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.Icon
@@ -45,6 +50,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -52,22 +58,26 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import kotlinx.coroutines.launch
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import com.example.gymprogress.data.WorkoutEntry
 import com.example.gymprogress.data.FormatUtils
+import com.example.gymprogress.data.WorkoutEntry
 import com.example.gymprogress.ui.theme.CardShape
 import com.example.gymprogress.ui.theme.FabShape
 import com.example.gymprogress.ui.theme.Spacing
 import com.example.gymprogress.ui.theme.Volt
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
 @Composable
@@ -169,7 +179,14 @@ fun JournalScreen(
                     }
                 }
             } else {
-                val grouped = entries.groupBy { it.date }
+                val sortedEntries = remember(entries) {
+                    entries.sortedWith(
+                        compareByDescending<WorkoutEntry> { parseEntryDate(it.date) }
+                            .thenBy { it.id }
+                    )
+                }
+
+                val grouped = sortedEntries.groupBy { it.date }
 
                 LazyColumn(
                     modifier = Modifier
@@ -397,14 +414,39 @@ private fun WorkoutEntryCard(
             }
         }
     }
+
 }
 
+private val storageDateFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
+private val displayDateFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("dd.MM.yyyy")
+
+private fun parseEntryDate(date: String): LocalDate {
+    return parseEntryDateOrNull(date) ?: LocalDate.MIN
+}
+
+private fun parseEntryDateOrNull(date: String): LocalDate? {
+    return runCatching { LocalDate.parse(date, storageDateFormatter) }
+        .getOrElse {
+            runCatching { LocalDate.parse(date, displayDateFormatter) }.getOrNull()
+        }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun EditEntryDialog(
     entry: WorkoutEntry,
     onDismiss: () -> Unit,
     onConfirm: (WorkoutEntry) -> Unit
 ) {
+    val storageFormatter = remember { DateTimeFormatter.ofPattern("yyyy-MM-dd") }
+    val displayFormatter = remember { DateTimeFormatter.ofPattern("dd.MM.yyyy") }
+    val initialDate = remember(entry.id) {
+        parseEntryDateOrNull(entry.date) ?: LocalDate.now()
+    }
+
+    var showDatePicker by remember { mutableStateOf(false) }
+    var storageDate by remember(entry.id) { mutableStateOf(initialDate.format(storageFormatter)) }
+    var displayDate by remember(entry.id) { mutableStateOf(initialDate.format(displayFormatter)) }
     var weightText by remember { mutableStateOf(FormatUtils.formatWeight(entry.weight)) }
     val setReps = remember {
         mutableStateListOf(*entry.reps.split(",").map { it.trim() }.toTypedArray())
@@ -452,6 +494,24 @@ private fun EditEntryDialog(
                         .verticalScroll(scrollState),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
+                    OutlinedTextField(
+                        value = displayDate,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Дата") },
+                        trailingIcon = {
+                            Icon(
+                                Icons.Default.DateRange,
+                                contentDescription = "Выбрать дату",
+                                modifier = Modifier.clickable { showDatePicker = true }
+                            )
+                        },
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { showDatePicker = true }
+                    )
+
                     OutlinedTextField(
                         value = weightText,
                         onValueChange = { weightText = it; weightError = false },
@@ -527,6 +587,7 @@ private fun EditEntryDialog(
                         if (isWeightValid && allRepsValid) {
                             onConfirm(
                                 entry.copy(
+                                    date = storageDate,
                                     weight = weight!!,
                                     reps = setReps.joinToString(",")
                                 )
@@ -537,6 +598,42 @@ private fun EditEntryDialog(
                     }
                 }
             }
+        }
+    }
+
+    if (showDatePicker) {
+        val currentMillis = runCatching {
+            LocalDate.parse(storageDate, storageFormatter)
+                .atStartOfDay(ZoneId.systemDefault())
+                .toInstant()
+                .toEpochMilli()
+        }.getOrElse { System.currentTimeMillis() }
+
+        val datePickerState = rememberDatePickerState(initialSelectedDateMillis = currentMillis)
+
+        DatePickerDialog(
+            onDismissRequest = { showDatePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    datePickerState.selectedDateMillis?.let { millis ->
+                        val selected = Instant.ofEpochMilli(millis)
+                            .atZone(ZoneId.systemDefault())
+                            .toLocalDate()
+                        displayDate = selected.format(displayFormatter)
+                        storageDate = selected.format(storageFormatter)
+                    }
+                    showDatePicker = false
+                }) {
+                    Text("OK")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDatePicker = false }) {
+                    Text("Отмена")
+                }
+            }
+        ) {
+            DatePicker(state = datePickerState)
         }
     }
 }

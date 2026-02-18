@@ -45,12 +45,14 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import com.example.gymprogress.data.ComparisonResult
+import com.example.gymprogress.data.Exercise
 import com.example.gymprogress.data.ExerciseType
+import com.example.gymprogress.data.FormatUtils
+import com.example.gymprogress.data.MuscleGroup
 import com.example.gymprogress.data.ProgressStatus
 import com.example.gymprogress.data.TrainingGoal
 import com.example.gymprogress.data.WorkoutEntry
 import com.example.gymprogress.data.WorkoutScoreCalculator
-import com.example.gymprogress.data.FormatUtils
 import com.example.gymprogress.ui.theme.CardShape
 import com.example.gymprogress.ui.theme.CardShapeSmall
 import com.example.gymprogress.ui.theme.Spacing
@@ -60,7 +62,7 @@ import com.example.gymprogress.ui.theme.Volt
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun StatsScreen(
-    exerciseNames: List<String>,
+    exercises: List<Exercise>,
     selectedExercise: String?,
     entriesForExercise: List<WorkoutEntry>,
     onExerciseSelected: (String?) -> Unit,
@@ -102,7 +104,7 @@ fun StatsScreen(
 
         Spacer(modifier = Modifier.height(Spacing.lg))
 
-        if (exerciseNames.isEmpty()) {
+        if (exercises.isEmpty()) {
             Box(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
@@ -132,6 +134,16 @@ fun StatsScreen(
             }
         } else {
             var expanded by remember { mutableStateOf(false) }
+            val groupedExercises = remember(exercises) {
+                exercises
+                    .groupBy { it.muscleGroup }
+                    .map { (groupKey, groupExercises) ->
+                        val displayName = MuscleGroup.entries
+                            .find { it.name == groupKey }?.displayName ?: groupKey
+                        displayName to groupExercises.sortedBy { it.name }
+                    }
+                    .sortedBy { it.first }
+            }
 
             ExposedDropdownMenuBox(
                 expanded = expanded,
@@ -153,14 +165,34 @@ fun StatsScreen(
                     expanded = expanded,
                     onDismissRequest = { expanded = false }
                 ) {
-                    exerciseNames.forEach { name ->
+                    groupedExercises.forEach { (displayName, groupExercises) ->
                         DropdownMenuItem(
-                            text = { Text(name) },
-                            onClick = {
-                                onExerciseSelected(name)
-                                expanded = false
-                            }
+                            text = {
+                                Text(
+                                    displayName,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            },
+                            onClick = {},
+                            enabled = false
                         )
+
+                        groupExercises.forEach { exercise ->
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        text = "    ${exercise.name}",
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                },
+                                onClick = {
+                                    onExerciseSelected(exercise.name)
+                                    expanded = false
+                                }
+                            )
+                        }
                     }
                 }
             }
