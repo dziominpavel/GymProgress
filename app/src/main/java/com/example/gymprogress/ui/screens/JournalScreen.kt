@@ -133,10 +133,21 @@ fun JournalScreen(
                     .clip(RoundedCornerShape(2.dp))
                     .background(Volt)
             )
-            if (entries.isNotEmpty()) {
-                Spacer(modifier = Modifier.height(Spacing.xs))
+            Spacer(modifier = Modifier.height(Spacing.xs))
+            val todayLabel = remember {
+                val today = LocalDate.now()
+                val formatter = DateTimeFormatter.ofPattern("d MMMM", java.util.Locale("ru"))
+                today.format(formatter)
+            }
+            if (entries.isEmpty()) {
                 Text(
-                    text = "${entries.size} записей",
+                    text = todayLabel,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                Text(
+                    text = "$todayLabel · ${entries.size} записей",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -166,7 +177,7 @@ fun JournalScreen(
                         }
                         Spacer(modifier = Modifier.height(Spacing.lg))
                         Text(
-                            "Записей пока нет",
+                            "Сегодня ещё нет тренировок",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface,
@@ -174,7 +185,7 @@ fun JournalScreen(
                         )
                         Spacer(modifier = Modifier.height(Spacing.xxs))
                         Text(
-                            "Нажмите + чтобы добавить\nпервую тренировку",
+                            "Нажмите + чтобы добавить\nтренировку за сегодня",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             textAlign = TextAlign.Center
@@ -317,7 +328,7 @@ fun JournalScreen(
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
 @Composable
-private fun WorkoutEntryCard(
+internal fun WorkoutEntryCard(
     entry: WorkoutEntry,
     onLongClick: () -> Unit
 ) {
@@ -444,7 +455,7 @@ private fun parseEntryDateOrNull(date: String): LocalDate? {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun EditEntryDialog(
+internal fun EditEntryDialog(
     entry: WorkoutEntry,
     exercises: List<Exercise>,
     bodyWeightKg: Double?,

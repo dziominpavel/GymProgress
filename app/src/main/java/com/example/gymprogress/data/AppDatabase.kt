@@ -9,7 +9,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
     entities = [WorkoutEntry::class, Exercise::class],
-    version = 5,
+    version = 6,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -36,6 +36,18 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // Normalize dates from dd.MM.yyyy to yyyy-MM-dd
+                db.execSQL("""
+                    UPDATE workout_entries
+                    SET date = SUBSTR(date,7,4) || '-' || SUBSTR(date,4,2) || '-' || SUBSTR(date,1,2)
+                    WHERE date LIKE '__.__.____ '
+                       OR (LENGTH(date) = 10 AND SUBSTR(date,3,1) = '.' AND SUBSTR(date,6,1) = '.')
+                """.trimIndent())
+            }
+        }
+
         @Volatile
         private var INSTANCE: AppDatabase? = null
 
@@ -46,7 +58,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "gym_progress_db"
                 )
-                    .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                    .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
                     .build()
                 INSTANCE = instance
                 instance

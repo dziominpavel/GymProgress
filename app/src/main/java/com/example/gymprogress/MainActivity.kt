@@ -40,10 +40,13 @@ import com.example.gymprogress.ui.screens.ActiveWorkoutScreen
 import com.example.gymprogress.ui.screens.CompletedSet
 import com.example.gymprogress.ui.screens.TrainerScreen
 import com.example.gymprogress.ui.screens.TrainerSettingsScreen
+import com.example.gymprogress.ui.screens.WorkoutHistoryScreen
 import com.example.gymprogress.data.SetType
 import com.example.gymprogress.data.WorkoutRecommendation
 import com.example.gymprogress.ui.theme.GymProgressTheme
 import com.example.gymprogress.viewmodel.WorkoutViewModel
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -67,9 +70,14 @@ fun GymProgressApp(viewModel: WorkoutViewModel = viewModel()) {
     var showTrainer by rememberSaveable { mutableStateOf(false) }
     var showTrainerSettings by rememberSaveable { mutableStateOf(false) }
     var showActiveWorkout by rememberSaveable { mutableStateOf(false) }
+    var showWorkoutHistory by rememberSaveable { mutableStateOf(false) }
     var activeWorkoutRec by remember { mutableStateOf<WorkoutRecommendation?>(null) }
 
     val entries by viewModel.allEntries.collectAsState()
+    val todayEntries = remember(entries) {
+        val today = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
+        entries.filter { it.date == today }
+    }
     val exerciseNames by viewModel.exerciseNames.collectAsState()
     val selectedExercise by viewModel.selectedExercise.collectAsState()
     val entriesForExercise by viewModel.entriesForSelectedExercise.collectAsState()
@@ -81,6 +89,20 @@ fun GymProgressApp(viewModel: WorkoutViewModel = viewModel()) {
     val workoutRecommendation by viewModel.workoutRecommendation.collectAsState()
     val aiAdvice by viewModel.aiAdvice.collectAsState()
     val aiLoading by viewModel.aiLoading.collectAsState()
+
+    if (showWorkoutHistory) {
+        BackHandler { showWorkoutHistory = false }
+        WorkoutHistoryScreen(
+            entries = entries,
+            exercises = allExercises,
+            bodyWeightKg = bodyWeightKg,
+            onDeleteEntry = { viewModel.deleteEntry(it) },
+            onUpdateEntry = { viewModel.updateEntry(it) },
+            onBack = { showWorkoutHistory = false },
+            modifier = Modifier.fillMaxSize()
+        )
+        return
+    }
 
     if (showSettings) {
         BackHandler { showSettings = false }
@@ -108,11 +130,15 @@ fun GymProgressApp(viewModel: WorkoutViewModel = viewModel()) {
         BackHandler {
             viewModel.updateTrainerSettings(trainerSettings)
             showTrainerSettings = false
+            showTrainer = true
         }
         TrainerSettingsScreen(
             settings = trainerSettings,
             onSettingsChanged = { viewModel.updateTrainerSettings(it) },
-            onBack = { showTrainerSettings = false },
+            onBack = {
+                showTrainerSettings = false
+                showTrainer = true
+            },
             modifier = Modifier.fillMaxSize()
         )
         return
@@ -209,6 +235,13 @@ fun GymProgressApp(viewModel: WorkoutViewModel = viewModel()) {
                                 }
                             )
                             DropdownMenuItem(
+                                text = { Text("История тренировок") },
+                                onClick = {
+                                    showMoreMenu = false
+                                    showWorkoutHistory = true
+                                }
+                            )
+                            DropdownMenuItem(
                                 text = { Text("Настройки") },
                                 onClick = {
                                     showMoreMenu = false
@@ -243,7 +276,7 @@ fun GymProgressApp(viewModel: WorkoutViewModel = viewModel()) {
         when (currentDestination) {
             AppDestinations.JOURNAL -> {
                 JournalScreen(
-                    entries = entries,
+                    entries = todayEntries,
                     exercises = allExercises,
                     bodyWeightKg = bodyWeightKg,
                     onAddClick = { showAddDialog = true },
