@@ -648,15 +648,15 @@ private fun ScoreDetailDialog(
                     ScoreRow("🎯 Итоговый балл", String.format(java.util.Locale.US, "%.3f", d.currentScore), null, null)
                 } else {
                     val c = d.currentComponents
-                    val p = d.previousComponents
-                    val pt = d.previousScore.coerceAtLeast(0.001)
-                    val contribI  = (c.intensityPoints  - (p?.intensityPoints  ?: 0.0)) / pt * 100
-                    val contribV  = (c.effVolumePoints  - (p?.effVolumePoints  ?: 0.0)) / pt * 100
-                    val contribR  = (c.repQualityPoints - (p?.repQualityPoints ?: 0.0)) / pt * 100
-                    val contribPR = (c.prBonus          - (p?.prBonus          ?: 0.0)) / pt * 100
-                    val contribS  = (c.setsAdjust       - (p?.setsAdjust       ?: 0.0)) / pt * 100
-                    val contribRT = -((c.repTrendPenalty) - (p?.repTrendPenalty ?: 0.0)) / pt * 100
-                    val contribF  = -((c.fatiguePenalty)  - (p?.fatiguePenalty  ?: 0.0)) / pt * 100
+                    val tr = d.trendComponents
+                    val pt = d.trendScore.coerceAtLeast(0.001)
+                    val contribI  = (c.intensityPoints  - (tr?.intensityPoints  ?: 0.0)) / pt * 100
+                    val contribV  = (c.effVolumePoints  - (tr?.effVolumePoints  ?: 0.0)) / pt * 100
+                    val contribR  = (c.repQualityPoints - (tr?.repQualityPoints ?: 0.0)) / pt * 100
+                    val contribPR = (c.prBonus          - (tr?.prBonus          ?: 0.0)) / pt * 100
+                    val contribS  = (c.setsAdjust       - (tr?.setsAdjust       ?: 0.0)) / pt * 100
+                    val contribRT = -((c.repTrendPenalty) - (tr?.repTrendPenalty ?: 0.0)) / pt * 100
+                    val contribF  = -((c.fatiguePenalty)  - (tr?.fatiguePenalty  ?: 0.0)) / pt * 100
                     Text("Вклад в итог (сумма = общий %)",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -682,18 +682,18 @@ private fun ScoreDetailDialog(
                     ScoreRowPct("🔁 Качество",
                         "[${d.previousReps.joinToString(",")}]→[${d.currentReps.joinToString(",")}]",
                         null, 0.0, overridePct = contribR)
-                    if (c.prBonus > 0 || (p?.prBonus ?: 0.0) > 0)
+                    if (c.prBonus > 0 || (tr?.prBonus ?: 0.0) > 0)
                         ScoreRowPct("🏆 Рекорд",
                             if (c.prBonus > 0) "Новый максимум!" else "—",
                             null, 0.0, overridePct = contribPR)
-                    if (c.setsAdjust != 0.0 || (p?.setsAdjust ?: 0.0) != 0.0)
+                    if (c.setsAdjust != 0.0 || (tr?.setsAdjust ?: 0.0) != 0.0)
                         ScoreRowPct("⚡ Подходы", "${d.previousSets} → ${d.currentSets} шт.",
                             null, 0.0, overridePct = contribS)
-                    if (c.repTrendPenalty > 0 || (p?.repTrendPenalty ?: 0.0) > 0)
+                    if (c.repTrendPenalty > 0 || (tr?.repTrendPenalty ?: 0.0) > 0)
                         ScoreRowPct("📈 Сэндбэгинг",
                             if (c.repTrendPenalty > 0) "Рост ↑" else "Нет",
                             null, 0.0, overridePct = contribRT)
-                    if (c.fatiguePenalty > 0 || (p?.fatiguePenalty ?: 0.0) > 0)
+                    if (c.fatiguePenalty > 0 || (tr?.fatiguePenalty ?: 0.0) > 0)
                         ScoreRowPct("⚠️ Усталость",
                             "${String.format(java.util.Locale.US,"%.2f",d.previousFatiguePenalty)} → ${String.format(java.util.Locale.US,"%.2f",d.currentFatiguePenalty)}",
                             null, 0.0, overridePct = contribF)
@@ -1004,8 +1004,8 @@ private fun ExerciseDayRow(ex: ExerciseDayScore) {
             if (expanded && hasDetail) {
                 val d = ex.comparisonResult!!.details!!
                 val pc = d.currentComponents
-                val pp = d.previousComponents
-                val pt = d.previousScore.coerceAtLeast(0.001)
+                val ptr = d.trendComponents
+                val pt = d.trendScore.coerceAtLeast(0.001)
                 Spacer(modifier = Modifier.height(10.dp))
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 Spacer(modifier = Modifier.height(8.dp))
@@ -1014,24 +1014,24 @@ private fun ExerciseDayRow(ex: ExerciseDayScore) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(modifier = Modifier.height(6.dp))
                 DayComponentRow("🏋️ Интенсивность",
-                    pp?.intensityPoints, pc.intensityPoints, prevTotal = pt)
+                    ptr?.intensityPoints, pc.intensityPoints, prevTotal = pt)
                 DayComponentRow("📊 Эфф. объём",
-                    pp?.effVolumePoints, pc.effVolumePoints, prevTotal = pt)
+                    ptr?.effVolumePoints, pc.effVolumePoints, prevTotal = pt)
                 DayComponentRow("⭐ Качество",
-                    pp?.repQualityPoints, pc.repQualityPoints, prevTotal = pt)
-                if (pc.setsAdjust != 0.0 || (pp?.setsAdjust ?: 0.0) != 0.0)
-                    DayComponentRow("⚡ Подходы", pp?.setsAdjust, pc.setsAdjust, prevTotal = pt)
-                if (pc.fatiguePenalty > 0 || (pp?.fatiguePenalty ?: 0.0) > 0)
-                    DayComponentRow("⚠️ Усталость", pp?.fatiguePenalty?.let { -it }, -pc.fatiguePenalty, prevTotal = pt)
-                if (pc.repTrendPenalty > 0 || (pp?.repTrendPenalty ?: 0.0) > 0)
-                    DayComponentRow("📈 Сэндбэгинг", pp?.repTrendPenalty?.let { -it }, -pc.repTrendPenalty, prevTotal = pt)
-                if (pc.prBonus > 0 || (pp?.prBonus ?: 0.0) > 0)
-                    DayComponentRow("🏆 Рекорд", pp?.prBonus, pc.prBonus, prevTotal = pt)
+                    ptr?.repQualityPoints, pc.repQualityPoints, prevTotal = pt)
+                if (pc.setsAdjust != 0.0 || (ptr?.setsAdjust ?: 0.0) != 0.0)
+                    DayComponentRow("⚡ Подходы", ptr?.setsAdjust, pc.setsAdjust, prevTotal = pt)
+                if (pc.fatiguePenalty > 0 || (ptr?.fatiguePenalty ?: 0.0) > 0)
+                    DayComponentRow("⚠️ Усталость", ptr?.fatiguePenalty?.let { -it }, -pc.fatiguePenalty, prevTotal = pt)
+                if (pc.repTrendPenalty > 0 || (ptr?.repTrendPenalty ?: 0.0) > 0)
+                    DayComponentRow("📈 Сэндбэгинг", ptr?.repTrendPenalty?.let { -it }, -pc.repTrendPenalty, prevTotal = pt)
+                if (pc.prBonus > 0 || (ptr?.prBonus ?: 0.0) > 0)
+                    DayComponentRow("🏆 Рекорд", ptr?.prBonus, pc.prBonus, prevTotal = pt)
                 Spacer(modifier = Modifier.height(6.dp))
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 Spacer(modifier = Modifier.height(6.dp))
                 DayComponentRow("🎯 Итого",
-                    d.previousScore.takeIf { it > 0 }, d.currentScore,
+                    d.trendScore.takeIf { it > 0 }, d.currentRawScore,
                     highlight = true)
             }
         }
@@ -1119,10 +1119,10 @@ private fun ScoreFormulaHelpDialog(onDismiss: () -> Unit) {
                 ) {
                     // --- Итоговый балл ---
                     HelpHeader("📊 Итоговый балл")
-                    Text("Число от 0.0 до 1.0. Сравнивает сегодняшнюю тренировку с вашими же лучшими показателями за последние 20 сессий. 1.0 = абсолютный максимум с учётом всей истории.",
+                    Text("Сравнивает сегодняшнюю тренировку со средним уровнем за последние 5 сессий. 1.0 = обычная тренировка, >1.0 = лучше вашей нормы, <1.0 = ниже нормы. Прогресс в % показывает отклонение от вашей же базы, а не от рекорда.",
                         style = MaterialTheme.typography.bodySmall)
                     Spacer(modifier = Modifier.height(8.dp))
-                    HelpFormula("Балл = Интенсивность + Эфф.Объём + Качество\n       + Бонусы − Штрафы   (обрезается до 1.0)")
+                    HelpFormula("Балл = Интенсивность + Эфф.Объём + Качество\n       + Бонусы − Штрафы\n1.0 = обычная тренировка, >1.0 = лучше нормы")
                     Spacer(modifier = Modifier.height(20.dp))
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                     Spacer(modifier = Modifier.height(20.dp))
@@ -1131,14 +1131,14 @@ private fun ScoreFormulaHelpDialog(onDismiss: () -> Unit) {
                     HelpHeader("🏋️ Компонент 1: Интенсивность (вес штанги)")
                     HelpChip("Гипертрофия / Базовые: 45%")
                     Spacer(modifier = Modifier.height(6.dp))
-                    Text("Насколько ваш рабочий вес близок к личному рекорду за последние 20 тренировок.",
+                    Text("Насколько ваш рабочий вес отличается от среднего за последние 5 тренировок. 1.0 = обычный вес, >1.0 = тяжелее нормы.",
                         style = MaterialTheme.typography.bodySmall)
                     Spacer(modifier = Modifier.height(6.dp))
-                    HelpFormula("Score  = вес_сегодня / лучший_вес_за_20_сессий\nВклад  = Score × 0.45")
+                    HelpFormula("Score  = вес_сегодня / средний_вес_за_5_сессий\nВклад  = Score × 0.45")
                     Spacer(modifier = Modifier.height(6.dp))
-                    HelpExample("60 кг / 60 кг = 1.000 → 1.000 × 0.45 = 0.450\n55 кг / 60 кг = 0.917 → 0.917 × 0.45 = 0.412")
+                    HelpExample("Средний вес: 60 кг\n60 кг → 1.00 × 0.45 = 0.450 (норма)\n63 кг → 1.05 × 0.45 = 0.473 (+5% к базе)")
                     Spacer(modifier = Modifier.height(6.dp))
-                    HelpNote("«Балл» в строке Интенсивность (0.450) — это и есть количество очков, которые дал этот компонент сегодня. 0.450 = поднял максимальный вес.")
+                    HelpNote("Стабильный вес = 0% вклада от интенсивности. Прибавка веса сразу отражается в %. Снижение — показывает минус.")
                     Spacer(modifier = Modifier.height(20.dp))
 
                     // --- Компонент 2 ---
@@ -1152,11 +1152,11 @@ private fun ScoreFormulaHelpDialog(onDismiss: () -> Unit) {
                     HelpRow("Близко к диапазону (6–7 / 13–15)", "× 0.7  ⚠️")
                     HelpRow("Далеко от диапазона (≤5 / ≥16)", "× 0.3  ❌")
                     Spacer(modifier = Modifier.height(6.dp))
-                    HelpFormula("Эфф.объём = вес × Σ(повторы × коэфф.)\nВклад = (Эфф.объём / лучший_за_20) × 0.35")
+                    HelpFormula("Эфф.объём = вес × Σ(повторы × коэфф.)\nВклад = (Эфф.объём / средний_за_5) × 0.35")
                     Spacer(modifier = Modifier.height(6.dp))
-                    HelpExample("60 кг × 3×10 (всё в диапазоне):\n= 60 × 30 = 1800 кг\nЛучшее в истории: 55 кг × 4×10 = 2200 кг\n→ 1800/2200 × 0.35 = 0.286 балла (вместо 0.350)")
+                    HelpExample("Средний объём: 1800 кг\n1800 кг → 1.00 × 0.35 = 0.350 (норма)\n2160 кг → 1.20 × 0.35 = 0.420 (+20% объёма)")
                     Spacer(modifier = Modifier.height(6.dp))
-                    HelpNote("Именно здесь возникает «парадокс»: 3×10 при 60 кг даёт меньше объёмных баллов, чем 4×10 при 55 кг. Это нормально — вес компенсируется через Интенсивность и PR-бонус.")
+                    HelpNote("Стабильный объём = 0% вклада. Один раз сделал меньше из-за усталости — база снизилась, поэтому следующая нормальная тренировка не будет ложно показывать большой рост.")
                     Spacer(modifier = Modifier.height(20.dp))
 
                     // --- Компонент 3 ---
@@ -1167,9 +1167,9 @@ private fun ScoreFormulaHelpDialog(onDismiss: () -> Unit) {
                     HelpRow("Близко к диапазону", "0.6")
                     HelpRow("За пределами диапазона", "0.2")
                     Spacer(modifier = Modifier.height(6.dp))
-                    HelpFormula("Вклад = среднее_качество × 0.20")
+                    HelpFormula("Score = качество_сегодня / среднее_качество_за_5\nВклад = Score × 0.20")
                     Spacer(modifier = Modifier.height(6.dp))
-                    HelpExample("3 × 10 при диапазоне 8–12:\n(1.0+1.0+1.0)/3 × 0.20 = 0.200 балла")
+                    HelpExample("Средн. качество: 0.8 (обычно попадаешь в диапазон)\nСегодня: 1.0 → 1.0/0.8 × 0.20 = 0.250 (+25%)\nСегодня: 0.8 → 1.0 × 0.20 = 0.200 (норма)")
                     Spacer(modifier = Modifier.height(20.dp))
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                     Spacer(modifier = Modifier.height(20.dp))
@@ -1179,7 +1179,7 @@ private fun ScoreFormulaHelpDialog(onDismiss: () -> Unit) {
                     Spacer(modifier = Modifier.height(6.dp))
                     HelpRow("🏆 Новый рекорд веса (PR)", "+0.060")
                     Spacer(modifier = Modifier.height(4.dp))
-                    Text("Итог выше 1.0 автоматически обрезается до 1.0.",
+                    Text("Срабатывает только при строгом увеличении веса (больше предыдущего максимума). Следующая тренировка с тем же весом бонуса не получает и минуса тоже нет.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(modifier = Modifier.height(16.dp))
