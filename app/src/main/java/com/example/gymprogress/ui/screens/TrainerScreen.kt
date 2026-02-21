@@ -375,6 +375,21 @@ private fun ExerciseRecCard(rec: ExerciseRecommendation) {
             Spacer(modifier = Modifier.height(Spacing.sm))
 
             Text(
+                text = "🏆 Лучшая тренировка",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold,
+                color = Volt
+            )
+            Spacer(modifier = Modifier.height(Spacing.xxs))
+            Text(
+                text = rec.bestEntry?.let { formatEntrySummary(it) } ?: "Нет данных",
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+
+            Spacer(modifier = Modifier.height(Spacing.xs))
+            Text(
                 text = "Прошлая тренировка",
                 style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.Bold,
@@ -389,20 +404,6 @@ private fun ExerciseRecCard(rec: ExerciseRecommendation) {
 
             Spacer(modifier = Modifier.height(Spacing.xs))
             Text(
-                text = "Лучшая тренировка",
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(modifier = Modifier.height(Spacing.xxs))
-            Text(
-                text = rec.bestEntry?.let { formatEntrySummary(it) } ?: "Нет данных",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-
-            Spacer(modifier = Modifier.height(Spacing.xs))
-            Text(
                 text = "Следующая тренировка",
                 style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.Bold,
@@ -411,25 +412,53 @@ private fun ExerciseRecCard(rec: ExerciseRecommendation) {
             Spacer(modifier = Modifier.height(Spacing.xxs))
             Text(
                 text = formatRecommendationSummary(rec),
-                style = MaterialTheme.typography.bodySmall,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface
             )
-            rec.note?.let { note ->
-                Spacer(modifier = Modifier.height(Spacing.xxs))
-                Text(
-                    text = note,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            rec.advice?.let { advice ->
-                Spacer(modifier = Modifier.height(Spacing.xxs))
-                Text(
-                    text = advice,
-                    style = MaterialTheme.typography.bodySmall,
-                    fontWeight = FontWeight.SemiBold,
-                    color = Volt
-                )
+
+            if (rec.note != null || rec.advice != null) {
+                Spacer(modifier = Modifier.height(Spacing.sm))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                        .padding(Spacing.sm)
+                ) {
+                    Column {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                "💡 Совет тренера",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = Volt
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(Spacing.xxs))
+                        
+                        rec.note?.let { note ->
+                            Text(
+                                text = note,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                        
+                        if (rec.note != null && rec.advice != null) {
+                            Spacer(modifier = Modifier.height(4.dp))
+                        }
+                        
+                        rec.advice?.let { advice ->
+                            Text(
+                                text = advice,
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
+                }
             }
         }
     }

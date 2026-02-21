@@ -301,6 +301,7 @@ fun GymProgressApp(viewModel: WorkoutViewModel = viewModel()) {
                     exercises = allExercises,
                     selectedExercise = selectedExercise,
                     entriesForExercise = entriesForExercise,
+                    allEntries = entries,
                     onExerciseSelected = { viewModel.selectExercise(it) },
                     trainingGoal = trainingGoal,
                     exerciseType = selectedExerciseType,

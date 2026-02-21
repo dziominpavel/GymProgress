@@ -22,6 +22,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DropdownMenuItem
@@ -45,9 +47,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.launch
-import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -85,6 +88,7 @@ fun AddEntryDialog(
 
     var selectedExercise by remember { mutableStateOf<Exercise?>(null) }
     var exerciseDropdownExpanded by remember { mutableStateOf(false) }
+    var expandedGroup by remember { mutableStateOf<String?>(null) }
 
     var weightText by remember { mutableStateOf("") }
     val setReps = remember { mutableStateListOf("") }
@@ -220,33 +224,56 @@ fun AddEntryDialog(
                                     val displayName = MuscleGroup.entries
                                         .find { it.name == group }?.displayName ?: group
 
+                                    val isExpanded = expandedGroup == group
+
                                     DropdownMenuItem(
                                         text = {
-                                            Text(
-                                                displayName,
-                                                style = MaterialTheme.typography.labelMedium,
-                                                fontWeight = FontWeight.Bold,
-                                                color = MaterialTheme.colorScheme.primary
-                                            )
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(vertical = 4.dp),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Text(
+                                                    displayName,
+                                                    style = MaterialTheme.typography.titleMedium,
+                                                    fontWeight = FontWeight.ExtraBold,
+                                                    color = Volt
+                                                )
+                                                Icon(
+                                                    imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                                                    contentDescription = null,
+                                                    tint = Volt
+                                                )
+                                            }
                                         },
-                                        onClick = {},
-                                        enabled = false
+                                        onClick = {
+                                            expandedGroup = if (isExpanded) null else group
+                                        },
+                                        modifier = Modifier.background(
+                                            if (isExpanded) Volt.copy(alpha = 0.08f)
+                                            else Color.Transparent
+                                        )
                                     )
 
-                                    groupExercises.forEach { exercise ->
-                                        DropdownMenuItem(
-                                            text = {
-                                                Text(
-                                                    "    ${exercise.name}",
-                                                    style = MaterialTheme.typography.bodyMedium
-                                                )
-                                            },
-                                            onClick = {
-                                                selectedExercise = exercise
-                                                exerciseError = false
-                                                exerciseDropdownExpanded = false
-                                            }
-                                        )
+                                    if (isExpanded) {
+                                        groupExercises.forEach { exercise ->
+                                            DropdownMenuItem(
+                                                text = {
+                                                    Text(
+                                                        "•  ${exercise.name}",
+                                                        style = MaterialTheme.typography.bodyLarge,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                    )
+                                                },
+                                                onClick = {
+                                                    selectedExercise = exercise
+                                                    exerciseError = false
+                                                    exerciseDropdownExpanded = false
+                                                }
+                                            )
+                                        }
                                     }
                                 }
                             }
