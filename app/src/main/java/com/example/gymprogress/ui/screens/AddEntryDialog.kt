@@ -38,14 +38,15 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuAnchorType
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -64,12 +65,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.example.gymprogress.data.Exercise
+import com.example.gymprogress.data.ExerciseRecommendation
 import com.example.gymprogress.data.ExerciseType
 import com.example.gymprogress.data.FormatUtils
 import com.example.gymprogress.data.MuscleGroup
 import com.example.gymprogress.data.TrainingGoal
 import com.example.gymprogress.data.WorkoutEntry
 import com.example.gymprogress.data.WorkoutScoreCalculator
+import com.example.gymprogress.ui.theme.Spacing
 import com.example.gymprogress.ui.theme.Volt
 import java.time.Instant
 import java.time.LocalDate
@@ -84,7 +87,9 @@ fun AddEntryDialog(
     bodyWeightKg: Double?,
     onDismiss: () -> Unit,
     onConfirm: (date: String, exerciseName: String, weight: Double, reps: String) -> Unit,
-    preselectedExercise: String? = null
+    preselectedExercise: String? = null,
+    exerciseRecommendation: ExerciseRecommendation? = null,
+    onExerciseSelected: (String?) -> Unit = {}
 ) {
     val today = LocalDate.now()
     var displayDate by remember { mutableStateOf(FormatUtils.formatDate(FormatUtils.toStorageDate(today))) }
@@ -100,6 +105,7 @@ fun AddEntryDialog(
     var expandedGroup by remember { mutableStateOf<String?>(null) }
 
     var weightText by remember { mutableStateOf("") }
+    var addAdditionalWeight by remember { mutableStateOf(false) }
     val setReps = remember { mutableStateListOf("") }
 
     var exerciseError by remember { mutableStateOf(false) }
@@ -107,15 +113,26 @@ fun AddEntryDialog(
     var bodyWeightError by remember { mutableStateOf(false) }
     var repsError by remember { mutableStateOf(false) }
 
+    LaunchedEffect(selectedExercise?.name) {
+        onExerciseSelected(selectedExercise?.name)
+    }
+    LaunchedEffect(selectedExercise?.isBodyweight) {
+        if (selectedExercise?.isBodyweight == true) {
+            addAdditionalWeight = false
+            weightText = ""
+        }
+    }
+
     val selectedExerciseType = remember(selectedExercise?.exerciseType) {
         selectedExercise?.exerciseType?.let { typeName ->
             ExerciseType.entries.find { it.name == typeName }
         } ?: ExerciseType.COMPOUND
     }
+    // Список: сверху первые по дате (старые), консистентно по проекту
     val exerciseHistory = remember(selectedExercise?.name, history) {
         val name = selectedExercise?.name ?: return@remember emptyList()
         history.filter { it.exerciseName == name }
-            .sortedByDescending { it.date }
+            .sortedWith(compareBy({ it.date }, { it.id }))
     }
     val bestEntry = remember(exerciseHistory, trainingGoal, selectedExerciseType) {
         exerciseHistory.maxByOrNull {
@@ -339,14 +356,71 @@ fun AddEntryDialog(
                         }
                     }
 
+                    if (exerciseRecommendation != null && (exerciseRecommendation.note != null || exerciseRecommendation.advice != null)) {
+                        Spacer(modifier = Modifier.height(Spacing.sm))
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                                .padding(Spacing.sm)
+                        ) {
+                            Column {
+                                Text(
+                                    text = "💡 Совет тренера",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Volt
+                                )
+                                Spacer(modifier = Modifier.height(Spacing.xxs))
+                                exerciseRecommendation.note?.let { note ->
+                                    Text(
+                                        text = note,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+                                if (exerciseRecommendation.note != null && exerciseRecommendation.advice != null) {
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                }
+                                exerciseRecommendation.advice?.let { advice ->
+                                    Text(
+                                        text = advice,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontWeight = FontWeight.Medium,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+                            }
+                        }
+                    }
+
                     val isBodyweightExercise = selectedExercise?.isBodyweight == true
                     val bodyWeightLabel = if (isBodyweightExercise) "Доп. вес (кг)" else "Вес (кг)"
                     val bodyWeightHint = if (isBodyweightExercise && bodyWeightKg != null) {
                         "Вес тела: ${FormatUtils.formatWeight(bodyWeightKg)} кг"
                     } else null
-                    val additionalWeightHint = if (isBodyweightExercise) {
-                        "Это ДОП. вес — итоговый вес = вес тела + доп. вес"
-                    } else null
+                    val weightFieldEnabled = !isBodyweightExercise || addAdditionalWeight
+
+                    if (isBodyweightExercise) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Checkbox(
+                                checked = addAdditionalWeight,
+                                onCheckedChange = {
+                                    addAdditionalWeight = it
+                                    if (!it) weightText = ""
+                                }
+                            )
+                            Text(
+                                text = "Ввод доп. веса",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
 
                     // Weight
                     OutlinedTextField(
@@ -358,6 +432,7 @@ fun AddEntryDialog(
                         },
                         label = { Text(bodyWeightLabel) },
                         singleLine = true,
+                        enabled = weightFieldEnabled,
                         isError = weightError || bodyWeightError,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         shape = RoundedCornerShape(12.dp),
@@ -376,15 +451,6 @@ fun AddEntryDialog(
                             text = it,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    additionalWeightHint?.let {
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Text(
-                            text = it,
-                            style = MaterialTheme.typography.bodySmall,
-                            fontWeight = FontWeight.SemiBold,
-                            color = Volt
                         )
                     }
                     if (bodyWeightError) {
@@ -472,9 +538,10 @@ fun AddEntryDialog(
                     TextButton(onClick = {
                         val isExerciseValid = selectedExercise != null
                         val isBodyweightExercise = selectedExercise?.isBodyweight == true
-                        val weightInput = parseWeightInput(weightText, isBodyweightExercise)
+                        val noAdditionalWeight = isBodyweightExercise && !addAdditionalWeight
+                        val weightInput = if (noAdditionalWeight) null else parseWeightInput(weightText, isBodyweightExercise)
                         val isBodyWeightReady = !isBodyweightExercise || bodyWeightKg != null
-                        val isWeightValid = isWeightInputValid(weightInput, isBodyweightExercise)
+                        val isWeightValid = noAdditionalWeight || isWeightInputValid(weightInput, isBodyweightExercise)
                         val allRepsValid = setReps.all { isRepsValid(it) }
 
                         exerciseError = !isExerciseValid
@@ -483,7 +550,7 @@ fun AddEntryDialog(
                         repsError = !allRepsValid
 
                         if (isExerciseValid && isWeightValid && allRepsValid && isBodyWeightReady) {
-                            val finalWeight = calcFinalWeight(weightInput, isBodyweightExercise, bodyWeightKg)
+                            val finalWeight = if (noAdditionalWeight) (bodyWeightKg ?: 0.0) else calcFinalWeight(weightInput, isBodyweightExercise, bodyWeightKg)
                             onConfirm(
                                 storageDate,
                                 selectedExercise!!.name,

@@ -279,6 +279,8 @@ fun GymProgressApp(viewModel: WorkoutViewModel = viewModel()) {
         )
     }
 
+    val exerciseRecommendationForJournal by viewModel.exerciseRecommendationForJournal.collectAsState()
+
     if (showAddDialog) {
         AddEntryDialog(
             exercises = allExercises,
@@ -286,9 +288,12 @@ fun GymProgressApp(viewModel: WorkoutViewModel = viewModel()) {
             trainingGoal = trainingGoal,
             bodyWeightKg = bodyWeightKg,
             preselectedExercise = preselectedExerciseForAdd,
+            exerciseRecommendation = exerciseRecommendationForJournal,
+            onExerciseSelected = { viewModel.loadExerciseRecommendationForJournal(it) },
             onDismiss = {
                 showAddDialog = false
                 preselectedExerciseForAdd = null
+                viewModel.clearExerciseRecommendationForJournal()
             },
             onConfirm = { date, name, weight, reps ->
                 viewModel.addEntry(date, name, weight, reps)

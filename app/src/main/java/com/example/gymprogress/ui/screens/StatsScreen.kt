@@ -54,6 +54,8 @@ import com.example.gymprogress.data.WorkoutScoreCalculator
 import com.example.gymprogress.ui.theme.Spacing
 import com.example.gymprogress.ui.theme.TextFieldShape
 import com.example.gymprogress.ui.theme.Volt
+import java.time.LocalDate
+import java.time.YearMonth
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -68,8 +70,10 @@ fun StatsScreen(
     exerciseType: ExerciseType = ExerciseType.COMPOUND
 ) {
     var showHelp by remember { mutableStateOf(false) }
-    var dayViewMode by remember { mutableStateOf(false) }
+    var statsGroupMode by remember { mutableStateOf(0) } // 0 = Упражнение, 1 = Тренировка, 2 = Дата
     var selectedMuscleGroup by remember { mutableStateOf<MuscleGroup?>(null) }
+    var selectedDate by remember { mutableStateOf<LocalDate?>(null) }
+    var displayedMonth by remember { mutableStateOf(YearMonth.now()) }
     if (showHelp) ScoreFormulaHelpDialog(onDismiss = { showHelp = false })
 
     Scaffold(
@@ -125,13 +129,13 @@ fun StatsScreen(
                 .background(MaterialTheme.colorScheme.surfaceVariant)
                 .padding(2.dp)
         ) {
-            listOf("Упражнение" to false, "Тренировка" to true).forEach { (label, mode) ->
-                val selected = dayViewMode == mode
+            listOf("Упражнение" to 0, "Тренировка" to 1, "Дата" to 2).forEach { (label, mode) ->
+                val selected = statsGroupMode == mode
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(18.dp))
                         .background(if (selected) Volt else Color.Transparent)
-                        .clickable { dayViewMode = mode }
+                        .clickable { statsGroupMode = mode }
                         .padding(horizontal = 16.dp, vertical = 6.dp)
                 ) {
                     Text(label,
@@ -172,7 +176,7 @@ fun StatsScreen(
                     )
                 }
             }
-        } else if (!dayViewMode) {
+        } else if (statsGroupMode == 0) {
             var expanded by remember { mutableStateOf(false) }
             var expandedGroup by remember { mutableStateOf<String?>(null) }
             val groupedExercises = remember(exercises) {
@@ -265,12 +269,15 @@ fun StatsScreen(
             Spacer(modifier = Modifier.height(20.dp))
 
             if (selectedExercise != null && entriesForExercise.isNotEmpty()) {
-                val maxWeight = entriesForExercise.maxOf { it.weight }
+                // Список: сверху первые по дате (старые), ниже — следующие (консистентно по проекту)
+                val listOldestFirst = remember(entriesForExercise) {
+                    entriesForExercise.sortedWith(compareBy({ it.date }, { it.id }))
+                }
+                val maxWeight = listOldestFirst.maxOf { it.weight }
 
-                val comparisons = entriesForExercise.mapIndexed { index, entry ->
-                    val previous = if (index < entriesForExercise.size - 1)
-                        entriesForExercise[index + 1] else null
-                    val historyFromHere = entriesForExercise.drop(index)
+                val comparisons = listOldestFirst.mapIndexed { index, entry ->
+                    val previous = listOldestFirst.getOrNull(index - 1)
+                    val historyFromHere = listOldestFirst.take(index + 1).reversed()
                     entry to WorkoutScoreCalculator.compare(
                         entry, previous, historyFromHere, trainingGoal, exerciseType
                     )
@@ -352,7 +359,7 @@ fun StatsScreen(
                     )
                 }
             }
-        } else {
+        } else if (statsGroupMode == 1) {
             WorkoutDaySection(
                 exercises = exercises,
                 allEntries = allEntries,
@@ -360,6 +367,63 @@ fun StatsScreen(
                 onMuscleGroupSelected = { selectedMuscleGroup = it },
                 trainingGoal = trainingGoal
             )
+        } else {
+            // Режим «Дата»: один общий скролл — календарь, блок «Итого», затем список записей (сверху первые по дате/id)
+            val workoutDates = remember(allEntries) {
+                allEntries.mapNotNull { FormatUtils.parseStorageDate(it.date) }.toSet()
+            }
+            val storageDate = selectedDate?.let { FormatUtils.toStorageDate(it) }
+            val entriesForSelectedDate = remember(allEntries, storageDate) {
+                if (storageDate == null) emptyList()
+                else allEntries.filter { it.date == storageDate }.sortedBy { it.id }
+            }
+            val dateReport = remember(storageDate, allEntries, exercises, trainingGoal) {
+                if (storageDate != null)
+                    WorkoutScoreCalculator.compareSessionByDate(
+                        selectedDateStorage = storageDate,
+                        allExercises = exercises,
+                        allEntries = allEntries,
+                        goal = trainingGoal
+                    )
+                else null
+            }
+
+            LazyColumn(
+                verticalArrangement = Arrangement.spacedBy(Spacing.xs)
+            ) {
+                item {
+                    WorkoutCalendar(
+                        month = displayedMonth,
+                        workoutDates = workoutDates,
+                        selectedDate = selectedDate,
+                        onDateSelected = { selectedDate = it },
+                        onPreviousMonth = { displayedMonth = displayedMonth.minusMonths(1) },
+                        onNextMonth = { displayedMonth = displayedMonth.plusMonths(1) }
+                    )
+                }
+                item { Spacer(modifier = Modifier.height(Spacing.md)) }
+                when {
+                    selectedDate == null -> { }
+                    entriesForSelectedDate.isEmpty() -> item {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = Spacing.xl),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                "Нет записей за эту дату",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    else -> {
+                        dateReport?.let { report -> item { WorkoutDayReportView(report, showOverallCard = false) } }
+                    }
+                }
+                item { Spacer(modifier = Modifier.height(Spacing.md)) }
+            }
         }
     }
     }

@@ -9,21 +9,25 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -36,6 +40,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -55,6 +60,11 @@ import com.example.gymprogress.ui.theme.CardShape
 import com.example.gymprogress.ui.theme.CardShapeSmall
 import com.example.gymprogress.ui.theme.Spacing
 import com.example.gymprogress.ui.theme.Volt
+import java.time.DayOfWeek
+import java.time.LocalDate
+import java.time.YearMonth
+import java.time.format.TextStyle
+import java.util.Locale
 
 @Composable
 internal fun StatCard(
@@ -295,87 +305,29 @@ internal fun ScoreDetailDialog(
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 Spacer(modifier = Modifier.height(12.dp))
 
+                val c = d.currentComponents
+                val metricStr = when (d.metricType.displayName) {
+                    "Объём" -> "${FormatUtils.formatVolume(c.metricValue)} кг"
+                    "E1RM" -> "${FormatUtils.formatWeight(c.metricValue)} кг"
+                    else -> "${c.metricValue.toInt()} повт."
+                }
+                ScoreRow("📊 ${c.metricLabel}", metricStr, null, null)
+                ScoreRow("🔁 Подходы × Повторы", "${d.currentSets} × [${d.currentReps.joinToString(", ")}]", null, null)
+                ScoreRow("⭐ Качество (${d.targetRange})", "${(d.currentRepQuality * 100).toInt()}%", null, null)
+                if (c.fatiguePenalty > 0) ScoreRow("⚠️ Усталость", "Неравномерность", null, -c.fatiguePenalty)
+                Spacer(modifier = Modifier.height(8.dp))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                Spacer(modifier = Modifier.height(8.dp))
                 if (isFirst) {
-                    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
-                        verticalAlignment = Alignment.CenterVertically) {
-                        Text("Параметр", style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1.8f))
-                        Text("Значение", style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1.6f))
-                        Text("Балл", style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold,
-                            modifier = Modifier.width(52.dp), textAlign = TextAlign.End)
-                    }
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant,
-                        modifier = Modifier.padding(vertical = 4.dp))
-                    val c = d.currentComponents
-                    ScoreRow("🏋️ Интенсивность (вес)", "${FormatUtils.formatWeight(d.currentWeight)} кг", c.intensityPoints, null)
-                    ScoreRow("📊 Эфф. объём", "${FormatUtils.formatVolume(d.currentEffVolume)} кг", c.effVolumePoints, null)
-                    ScoreRow("🔁 Подходы × Повторы", "${d.currentSets} × [${d.currentReps.joinToString(", ")}]", null, null)
-                    ScoreRow("⭐ Качество (${d.targetRange})", "${(d.currentRepQuality * 100).toInt()}%", c.repQualityPoints, null)
-                    if (c.prBonus > 0) ScoreRow("🏆 Рекорд веса", "Новый максимум!", c.prBonus, null)
-                    if (c.setsAdjust != 0.0) ScoreRow("⚡ Подходы (${d.currentSets} шт.)", if (c.setsAdjust > 0) "Оптимально" else "Неоптимально", c.setsAdjust, null)
-                    if (c.fatiguePenalty > 0) ScoreRow("⚠️ Усталость", "Неравномерность", -c.fatiguePenalty, null)
-                    if (c.repTrendPenalty > 0) ScoreRow("📈 Сэндбэгинг", "Рост повт. по подходам", -c.repTrendPenalty, null)
-                    Spacer(modifier = Modifier.height(8.dp))
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                    Spacer(modifier = Modifier.height(8.dp))
-                    ScoreRow("🎯 Итоговый балл", String.format(java.util.Locale.US, "%.3f", d.currentScore), null, null)
+                    ScoreRow("🎯 Балл", "${d.currentScore} / 1000", null, null)
                 } else {
-                    val c = d.currentComponents
-                    val tr = d.trendComponents
-                    val pt = d.trendScore.coerceAtLeast(0.001)
-                    val contribI  = (c.intensityPoints  - (tr?.intensityPoints  ?: 0.0)) / pt * 100
-                    val contribV  = (c.effVolumePoints  - (tr?.effVolumePoints  ?: 0.0)) / pt * 100
-                    val contribR  = (c.repQualityPoints - (tr?.repQualityPoints ?: 0.0)) / pt * 100
-                    val contribPR = (c.prBonus          - (tr?.prBonus          ?: 0.0)) / pt * 100
-                    val contribS  = (c.setsAdjust       - (tr?.setsAdjust       ?: 0.0)) / pt * 100
-                    val contribRT = -((c.repTrendPenalty) - (tr?.repTrendPenalty ?: 0.0)) / pt * 100
-                    val contribF  = -((c.fatiguePenalty)  - (tr?.fatiguePenalty  ?: 0.0)) / pt * 100
-                    Text("Вклад в итог (сумма = общий %)",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
-                        verticalAlignment = Alignment.CenterVertically) {
-                        Text("Параметр", style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1.8f))
-                        Text("Значение", style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1.6f))
-                        Text("вклад", style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold,
-                            modifier = Modifier.width(52.dp), textAlign = TextAlign.End)
+                    val baselineMetricStr = when (d.metricType.displayName) {
+                        "Объём" -> FormatUtils.formatVolume(d.baselineMetric)
+                        "E1RM" -> FormatUtils.formatWeight(d.baselineMetric)
+                        else -> d.baselineMetric.toInt().toString()
                     }
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant,
-                        modifier = Modifier.padding(vertical = 4.dp))
-                    ScoreRowPct("🏋️ Интенсивность",
-                        "${FormatUtils.formatWeight(d.previousWeight)} → ${FormatUtils.formatWeight(d.currentWeight)} кг",
-                        null, 0.0, overridePct = contribI)
-                    ScoreRowPct("📊 Эфф. объём",
-                        "${FormatUtils.formatVolume(d.previousEffVolume)} → ${FormatUtils.formatVolume(d.currentEffVolume)} кг",
-                        null, 0.0, overridePct = contribV)
-                    ScoreRowPct("🔁 Качество",
-                        "[${d.previousReps.joinToString(",")}]→[${d.currentReps.joinToString(",")}]",
-                        null, 0.0, overridePct = contribR)
-                    if (c.prBonus > 0 || (tr?.prBonus ?: 0.0) > 0)
-                        ScoreRowPct("🏆 Рекорд",
-                            if (c.prBonus > 0) "Новый максимум!" else "—",
-                            null, 0.0, overridePct = contribPR)
-                    if (c.setsAdjust != 0.0 || (tr?.setsAdjust ?: 0.0) != 0.0)
-                        ScoreRowPct("⚡ Подходы", "${d.previousSets} → ${d.currentSets} шт.",
-                            null, 0.0, overridePct = contribS)
-                    if (c.repTrendPenalty > 0 || (tr?.repTrendPenalty ?: 0.0) > 0)
-                        ScoreRowPct("📈 Сэндбэгинг",
-                            if (c.repTrendPenalty > 0) "Рост ↑" else "Нет",
-                            null, 0.0, overridePct = contribRT)
-                    if (c.fatiguePenalty > 0 || (tr?.fatiguePenalty ?: 0.0) > 0)
-                        ScoreRowPct("⚠️ Усталость",
-                            "${String.format(java.util.Locale.US,"%.2f",d.previousFatiguePenalty)} → ${String.format(java.util.Locale.US,"%.2f",d.currentFatiguePenalty)}",
-                            null, 0.0, overridePct = contribF)
-                    Spacer(modifier = Modifier.height(8.dp))
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                    Spacer(modifier = Modifier.height(8.dp))
-                    ScoreRowPct("🎯 Итого", "сумма вкладов",
+                    ScoreRow("📊 ${c.metricLabel}", "$metricStr (база: $baselineMetricStr)", null, null)
+                    ScoreRowPct("🎯 Прогресс", "vs среднее за 3 сессии",
                         null, 0.0, highlight = true, overridePct = comparison.deltaPercent)
                 }
 
@@ -505,6 +457,121 @@ internal fun ScoreRowPct(
 }
 
 @Composable
+internal fun WorkoutCalendar(
+    month: YearMonth,
+    workoutDates: Set<LocalDate>,
+    selectedDate: LocalDate?,
+    onDateSelected: (LocalDate) -> Unit,
+    onPreviousMonth: () -> Unit,
+    onNextMonth: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        shape = CardShape
+    ) {
+        Column(modifier = Modifier.padding(Spacing.md)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                IconButton(onClick = onPreviousMonth) {
+                    Icon(Icons.Default.ArrowBack, contentDescription = "Предыдущий месяц")
+                }
+                val monthName = month.month
+                    .getDisplayName(TextStyle.FULL_STANDALONE, Locale.forLanguageTag("ru"))
+                    .replaceFirstChar { it.uppercase() }
+                Text(
+                    text = "$monthName ${month.year}",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                IconButton(onClick = onNextMonth) {
+                    Icon(Icons.Default.ArrowBack, contentDescription = "Следующий месяц", modifier = Modifier.graphicsLayer { scaleX = -1f })
+                }
+            }
+
+            Spacer(modifier = Modifier.height(Spacing.xs))
+
+            Row(modifier = Modifier.fillMaxWidth()) {
+                listOf("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс").forEach { day ->
+                    Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                        Text(
+                            text = day,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            val firstDay = month.atDay(1)
+            val startOffset = (firstDay.dayOfWeek.value - DayOfWeek.MONDAY.value + 7) % 7
+            val daysInMonth = month.lengthOfMonth()
+            val rows = (startOffset + daysInMonth + 6) / 7
+
+            (0 until rows).forEach { row ->
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    (0 until 7).forEach { col ->
+                        val dayNumber = row * 7 + col - startOffset + 1
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .aspectRatio(1f),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (dayNumber in 1..daysInMonth) {
+                                val date = month.atDay(dayNumber)
+                                val hasWorkout = date in workoutDates
+                                val isSelected = date == selectedDate
+                                val isToday = date == LocalDate.now()
+
+                                Box(
+                                    modifier = Modifier
+                                        .size(32.dp)
+                                        .clip(CircleShape)
+                                        .background(
+                                            when {
+                                                isSelected -> Volt
+                                                hasWorkout -> Volt.copy(alpha = 0.2f)
+                                                else -> Color.Transparent
+                                            }
+                                        )
+                                        .then(
+                                            if (isToday && !isSelected)
+                                                Modifier.border(1.dp, Volt.copy(alpha = 0.6f), CircleShape)
+                                            else Modifier
+                                        )
+                                        .clickable { onDateSelected(date) },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = "$dayNumber",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontWeight = if (isSelected || hasWorkout || isToday) FontWeight.Bold else FontWeight.Normal,
+                                        color = when {
+                                            isSelected -> MaterialTheme.colorScheme.background
+                                            hasWorkout -> Volt
+                                            else -> MaterialTheme.colorScheme.onSurface
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
 internal fun WorkoutDaySection(
     exercises: List<Exercise>,
     allEntries: List<WorkoutEntry>,
@@ -554,59 +621,65 @@ internal fun WorkoutDaySection(
 }
 
 @Composable
-internal fun WorkoutDayReportView(report: WorkoutDayReport) {
-    val displayName = MuscleGroup.entries.find { it.name == report.muscleGroupName }?.displayName
-        ?: report.muscleGroupName
-    val hasPrev = report.previousOverallScore != null
-    val pct = report.overallDeltaPercent
-    val statusColor = when (report.overallStatus) {
-        ProgressStatus.BETTER -> Color(0xFF4CAF50)
-        ProgressStatus.WORSE -> MaterialTheme.colorScheme.error
-        ProgressStatus.SAME -> MaterialTheme.colorScheme.onSurfaceVariant
-        ProgressStatus.FIRST -> Volt
-    }
-    val statusIcon = when (report.overallStatus) {
-        ProgressStatus.BETTER -> "▲"; ProgressStatus.WORSE -> "▼"
-        ProgressStatus.SAME -> "→"; ProgressStatus.FIRST -> "★"
-    }
-    Card(modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        shape = CardShape) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(displayName, style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Spacer(modifier = Modifier.height(4.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("Итого", style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Black)
-                    Text(report.currentDate, style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    if (report.previousDate != null)
-                        Text("vs ${report.previousDate}",
-                            style = MaterialTheme.typography.labelSmall,
+internal fun WorkoutDayReportView(
+    report: WorkoutDayReport,
+    showOverallCard: Boolean = true
+) {
+    if (showOverallCard) {
+        val displayName = MuscleGroup.entries.find { it.name == report.muscleGroupName }?.displayName
+            ?: report.muscleGroupName
+        val hasPrev = report.previousOverallScore != null
+        val pct = report.overallDeltaPercent
+        val statusColor = when (report.overallStatus) {
+            ProgressStatus.BETTER -> Color(0xFF4CAF50)
+            ProgressStatus.WORSE -> MaterialTheme.colorScheme.error
+            ProgressStatus.SAME -> MaterialTheme.colorScheme.onSurfaceVariant
+            ProgressStatus.FIRST -> Volt
+        }
+        val statusIcon = when (report.overallStatus) {
+            ProgressStatus.BETTER -> "▲"; ProgressStatus.WORSE -> "▼"
+            ProgressStatus.SAME -> "→"; ProgressStatus.FIRST -> "★"
+        }
+        Card(modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            shape = CardShape) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(displayName, style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Итого", style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Black)
+                        Text(FormatUtils.formatDate(report.currentDate), style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                Column(horizontalAlignment = Alignment.End) {
-                    if (hasPrev) {
-                        val sign = if (pct >= 0) "+" else ""
-                        Text("$statusIcon $sign${String.format(java.util.Locale.US, "%.1f", pct)}%",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Black, color = statusColor)
-                        Text("от предыдущей",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    } else {
-                        Text("★ Первый раз", style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold, color = Volt)
+                        if (report.previousDate != null)
+                            Text("vs ${FormatUtils.formatDate(report.previousDate)}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Column(horizontalAlignment = Alignment.End) {
+                        if (hasPrev) {
+                            val sign = if (pct >= 0) "+" else ""
+                            Text("$statusIcon $sign${String.format(java.util.Locale.US, "%.1f", pct)}%",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Black, color = statusColor)
+                            Text("vs среднее за 3 сессии",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        } else {
+                            Text("★ Первый раз", style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold, color = Volt)
+                        }
                     }
                 }
             }
         }
+        Spacer(modifier = Modifier.height(12.dp))
     }
-    Spacer(modifier = Modifier.height(12.dp))
-    Column(modifier = Modifier.verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    // Без verticalScroll: WorkoutDayReportView используется как item() внутри LazyColumn;
+    // вложенная прокрутка даёт бесконечную высоту и IllegalStateException.
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         report.exercises.forEach { ex -> ExerciseDayRow(ex) }
         Spacer(modifier = Modifier.height(Spacing.md))
     }
@@ -615,7 +688,7 @@ internal fun WorkoutDayReportView(report: WorkoutDayReport) {
 @Composable
 internal fun ExerciseDayRow(ex: ExerciseDayScore) {
     var expanded by remember { mutableStateOf(false) }
-    val hasPrev = ex.previousScore != null && ex.currentEntry != null
+    val hasPrev = ex.previousEntry != null && ex.currentEntry != null
     val statusColor = when (ex.status) {
         ProgressStatus.BETTER -> Color(0xFF4CAF50)
         ProgressStatus.WORSE -> MaterialTheme.colorScheme.error
@@ -646,7 +719,7 @@ internal fun ExerciseDayRow(ex: ExerciseDayScore) {
                             MaterialTheme.colorScheme.onSurfaceVariant
                         else MaterialTheme.colorScheme.error)
                     if (ex.previousEntry != null && ex.currentEntry != null)
-                        Text("было: ${ex.previousEntry.weight} кг · ${ex.previousEntry.reps}",
+                        Text("vs ${FormatUtils.formatDate(ex.previousEntry.date)}: ${ex.previousEntry.weight} кг · ${ex.previousEntry.reps}",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
@@ -679,35 +752,31 @@ internal fun ExerciseDayRow(ex: ExerciseDayScore) {
             if (expanded && hasDetail) {
                 val d = ex.comparisonResult!!.details!!
                 val pc = d.currentComponents
-                val ptr = d.trendComponents
-                val pt = d.trendScore.coerceAtLeast(0.001)
+                val ptr = d.baselineComponents
                 Spacer(modifier = Modifier.height(10.dp))
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 Spacer(modifier = Modifier.height(8.dp))
-                Text("Вклад в итог (сумма = общий %)",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Spacer(modifier = Modifier.height(6.dp))
-                DayComponentRow("🏋️ Интенсивность",
-                    ptr?.intensityPoints, pc.intensityPoints, prevTotal = pt)
-                DayComponentRow("📊 Эфф. объём",
-                    ptr?.effVolumePoints, pc.effVolumePoints, prevTotal = pt)
-                DayComponentRow("⭐ Качество",
-                    ptr?.repQualityPoints, pc.repQualityPoints, prevTotal = pt)
-                if (pc.setsAdjust != 0.0 || (ptr?.setsAdjust ?: 0.0) != 0.0)
-                    DayComponentRow("⚡ Подходы", ptr?.setsAdjust, pc.setsAdjust, prevTotal = pt)
+                DayComponentRow("📊 ${pc.metricLabel}", ptr?.metricValue, pc.metricValue, highlight = false)
+                DayComponentRow("⭐ Качество", ptr?.repQuality, pc.repQuality, highlight = false)
                 if (pc.fatiguePenalty > 0 || (ptr?.fatiguePenalty ?: 0.0) > 0)
-                    DayComponentRow("⚠️ Усталость", ptr?.fatiguePenalty?.let { -it }, -pc.fatiguePenalty, prevTotal = pt)
-                if (pc.repTrendPenalty > 0 || (ptr?.repTrendPenalty ?: 0.0) > 0)
-                    DayComponentRow("📈 Сэндбэгинг", ptr?.repTrendPenalty?.let { -it }, -pc.repTrendPenalty, prevTotal = pt)
-                if (pc.prBonus > 0 || (ptr?.prBonus ?: 0.0) > 0)
-                    DayComponentRow("🏆 Рекорд", ptr?.prBonus, pc.prBonus, prevTotal = pt)
+                    DayComponentRow("⚠️ Усталость", ptr?.fatiguePenalty?.let { -it }, -pc.fatiguePenalty, highlight = false)
                 Spacer(modifier = Modifier.height(6.dp))
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 Spacer(modifier = Modifier.height(6.dp))
-                DayComponentRow("🎯 Итого",
-                    d.trendScore.takeIf { it > 0 }, d.currentRawScore,
-                    highlight = true)
+                DayComponentRow("🎯 Балл", ptr?.totalScore?.toDouble(), pc.totalScore.toDouble(), highlight = true)
+                Row(modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("📈 Прогресс", style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.weight(1f), fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface)
+                    val pctColor = when {
+                        ex.deltaPercent > 0 -> Color(0xFF4CAF50)
+                        ex.deltaPercent < 0 -> MaterialTheme.colorScheme.error
+                        else -> MaterialTheme.colorScheme.onSurfaceVariant
+                    }
+                    val sign = if (ex.deltaPercent >= 0) "+" else ""
+                    Text("$sign${String.format(java.util.Locale.US, "%.1f", ex.deltaPercent)}%",
+                        style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = pctColor)
+                }
             }
         }
     }

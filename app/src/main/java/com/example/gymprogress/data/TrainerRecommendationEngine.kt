@@ -67,6 +67,28 @@ class TrainerRecommendationEngine {
     }
 
     /**
+     * Рекомендация по одному упражнению для отображения в журнале (под «Лучшая тренировка»).
+     * Не привязана к дню сплита — используется последняя по дате запись как ориентир.
+     */
+    fun getRecommendationForExercise(
+        exercise: Exercise,
+        history: List<WorkoutEntry>,
+        trainingGoal: TrainingGoal,
+        settings: TrainerSettings
+    ): ExerciseRecommendation {
+        val isDeload = shouldDeload(settings, history)
+        return buildExerciseRec(
+            exercise = exercise,
+            history = history,
+            trainingGoal = trainingGoal,
+            progressionType = settings.progressionType,
+            includeWarmup = settings.includeWarmup,
+            isDeload = isDeload,
+            lastSessionDate = null
+        )
+    }
+
+    /**
      * Находит последнюю по дате сессию, соответствующую указанному дню сплита.
      * Используется для авто-режима (предыдущий день) и ручного выбора дня в журнале.
      */
@@ -291,6 +313,7 @@ class TrainerRecommendationEngine {
     ): List<ExerciseRecommendation> {
         val result = mutableListOf<ExerciseRecommendation>()
         val lastSessionNames = getLastSessionExercises(muscleGroups, exercises, history)
+        val lastSessionOrder = getLastSessionExerciseOrder(muscleGroups, exercises, history)
         val lastSessionDate = getLastSessionDate(muscleGroups, exercises, history)
 
         for (group in muscleGroups) {
@@ -319,17 +342,29 @@ class TrainerRecommendationEngine {
             }
         }
 
+        // Сначала в порядке прошлой сессии (как вводил пользователь), остальные — compound первыми
+        if (lastSessionOrder.isNotEmpty()) {
+            val orderMap = lastSessionOrder.mapIndexed { i, name -> name to i }.toMap()
+            val inOrder = result.filter { it.exercise.name in orderMap }
+            val inOrderSorted = lastSessionOrder.mapNotNull { name ->
+                inOrder.find { it.exercise.name == name }
+            }
+            val rest = result.filter { it.exercise.name !in orderMap }
+                .sortedBy { if (it.exercise.exerciseType == ExerciseType.COMPOUND.name) 0 else 1 }
+            return inOrderSorted + rest
+        }
         return result.sortedBy {
             if (it.exercise.exerciseType == ExerciseType.COMPOUND.name) 0 else 1
         }
     }
 
-    private fun getLastSessionExercises(
+    /** Порядок упражнений в прошлой сессии (по id записей = порядок ввода). */
+    private fun getLastSessionExerciseOrder(
         muscleGroups: List<MuscleGroup>,
         exercises: List<Exercise>,
         history: List<WorkoutEntry>
-    ): Set<String> {
-        if (history.isEmpty()) return emptySet()
+    ): List<String> {
+        if (history.isEmpty()) return emptyList()
 
         val groupNames = muscleGroups.map { it.name }.toSet()
         val relevantExerciseNames = exercises
@@ -338,13 +373,22 @@ class TrainerRecommendationEngine {
             .toSet()
 
         val relevantHistory = history.filter { it.exerciseName in relevantExerciseNames }
-        if (relevantHistory.isEmpty()) return emptySet()
+        if (relevantHistory.isEmpty()) return emptyList()
 
         val lastDate = relevantHistory.maxOf { it.date }
         return relevantHistory
             .filter { it.date == lastDate }
+            .sortedBy { it.id }
             .map { it.exerciseName }
-            .toSet()
+            .distinct()
+    }
+
+    private fun getLastSessionExercises(
+        muscleGroups: List<MuscleGroup>,
+        exercises: List<Exercise>,
+        history: List<WorkoutEntry>
+    ): Set<String> {
+        return getLastSessionExerciseOrder(muscleGroups, exercises, history).toSet()
     }
 
     private fun getLastSessionDate(
@@ -501,7 +545,7 @@ class TrainerRecommendationEngine {
             } else {
                 "Цель: +1 повтор в последнем подходе"
             }
-        } else if (bestScore - lastScore >= 0.08) {
+        } else if (bestScore - lastScore >= 15) {
             val bestReps = parseReps(bestEntry.reps)
             val repsLabel = if (bestReps.isNotEmpty()) bestReps.joinToString(" · ") else ""
             if (repsLabel.isNotEmpty()) {
@@ -554,9 +598,9 @@ class TrainerRecommendationEngine {
         val lastReps = parseReps(lastEntry.reps)
         val isStableInRange = lastReps.isNotEmpty() && lastReps.all { it in targetRange }
         val isLowFatigue = lastScore.fatiguePenalty <= 0.07
-        val isHighFatigue = lastScore.fatiguePenalty >= 0.12 || lastScore.repQuality < 0.6
-        val isImproving = previousScore != null && lastScore.score - previousScore.score >= 0.02
-        val isStagnating = previousScore != null && kotlin.math.abs(lastScore.score - previousScore.score) < 0.01
+        val isHighFatigue = lastScore.fatiguePenalty >= 0.08 || lastScore.repQuality < 0.6
+        val isImproving = previousScore != null && lastScore.score - previousScore.score >= 5
+        val isStagnating = previousScore != null && kotlin.math.abs(lastScore.score - previousScore.score) < 3
 
         return ProgressSnapshot(
             lastScore = lastScore,

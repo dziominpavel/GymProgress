@@ -84,11 +84,12 @@ fun WorkoutHistoryScreen(
             .toSet()
     }
 
+    // Список: сверху первые по дате (старые), ниже — следующие (консистентно по проекту)
     val filteredEntries = remember(entries, selectedDate) {
         if (selectedDate == null) {
-            entries.sortedByDescending { whParseDate(it.date) }
+            entries.sortedWith(compareBy({ whParseDate(it.date) }, { it.id }))
         } else {
-            entries.filter { whParseDate(it.date) == selectedDate }
+            entries.filter { whParseDate(it.date) == selectedDate }.sortedBy { it.id }
         }
     }
 
@@ -180,11 +181,12 @@ fun WorkoutHistoryScreen(
 
             Spacer(modifier = Modifier.height(Spacing.xs))
 
+            // Группы по дате: сверху старые даты, внутри даты — записи по id (сначала введённые)
             val grouped = remember(filteredEntries) {
                 filteredEntries
                     .groupBy { it.date }
                     .entries
-                    .sortedByDescending { (date, _) -> whParseDate(date) }
+                    .sortedBy { (date, _) -> whParseDate(date) }
                     .associate { it.key to it.value.sortedBy { e -> e.id } }
             }
 
@@ -327,120 +329,5 @@ fun WorkoutHistoryScreen(
             onDismiss = { entryToEdit = null },
             onConfirm = { updated -> onUpdateEntry(updated); entryToEdit = null }
         )
-    }
-}
-
-@Composable
-private fun WorkoutCalendar(
-    month: YearMonth,
-    workoutDates: Set<LocalDate>,
-    selectedDate: LocalDate?,
-    onDateSelected: (LocalDate) -> Unit,
-    onPreviousMonth: () -> Unit,
-    onNextMonth: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        shape = CardShape
-    ) {
-        Column(modifier = Modifier.padding(Spacing.md)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                IconButton(onClick = onPreviousMonth) {
-                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "Предыдущий месяц")
-                }
-                val monthName = month.month
-                    .getDisplayName(TextStyle.FULL_STANDALONE, Locale.forLanguageTag("ru"))
-                    .replaceFirstChar { it.uppercase() }
-                Text(
-                    text = "$monthName ${month.year}",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                IconButton(onClick = onNextMonth) {
-                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "Следующий месяц")
-                }
-            }
-
-            Spacer(modifier = Modifier.height(Spacing.xs))
-
-            Row(modifier = Modifier.fillMaxWidth()) {
-                listOf("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс").forEach { day ->
-                    Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
-                        Text(
-                            text = day,
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Medium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                        )
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(4.dp))
-
-            val firstDay = month.atDay(1)
-            val startOffset = (firstDay.dayOfWeek.value - DayOfWeek.MONDAY.value + 7) % 7
-            val daysInMonth = month.lengthOfMonth()
-            val rows = (startOffset + daysInMonth + 6) / 7
-
-            (0 until rows).forEach { row ->
-                Row(modifier = Modifier.fillMaxWidth()) {
-                    (0 until 7).forEach { col ->
-                        val dayNumber = row * 7 + col - startOffset + 1
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .aspectRatio(1f),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            if (dayNumber in 1..daysInMonth) {
-                                val date = month.atDay(dayNumber)
-                                val hasWorkout = date in workoutDates
-                                val isSelected = date == selectedDate
-                                val isToday = date == LocalDate.now()
-
-                                Box(
-                                    modifier = Modifier
-                                        .size(32.dp)
-                                        .clip(CircleShape)
-                                        .background(
-                                            when {
-                                                isSelected -> Volt
-                                                hasWorkout -> Volt.copy(alpha = 0.2f)
-                                                else -> Color.Transparent
-                                            }
-                                        )
-                                        .then(
-                                            if (isToday && !isSelected)
-                                                Modifier.border(1.dp, Volt.copy(alpha = 0.6f), CircleShape)
-                                            else Modifier
-                                        )
-                                        .clickable { onDateSelected(date) },
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        text = "$dayNumber",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        fontWeight = if (isSelected || hasWorkout || isToday) FontWeight.Bold else FontWeight.Normal,
-                                        color = when {
-                                            isSelected -> MaterialTheme.colorScheme.background
-                                            hasWorkout -> Volt
-                                            else -> MaterialTheme.colorScheme.onSurface
-                                        }
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
     }
 }

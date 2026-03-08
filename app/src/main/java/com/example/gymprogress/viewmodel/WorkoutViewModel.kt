@@ -17,6 +17,7 @@ import com.example.gymprogress.data.TrainerSettings
 import com.example.gymprogress.data.TrainingGoal
 import com.example.gymprogress.data.WorkoutEntry
 import com.example.gymprogress.data.WorkoutRecommendation
+import com.example.gymprogress.data.ExerciseRecommendation
 import com.example.gymprogress.data.PreviousSessionInSplit
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -86,6 +87,9 @@ class WorkoutViewModel(application: Application) : AndroidViewModel(application)
 
     private val _journalSelectedDayIndex = MutableStateFlow<Int?>(null)
     val journalSelectedDayIndex: StateFlow<Int?> = _journalSelectedDayIndex.asStateFlow()
+
+    private val _exerciseRecommendationForJournal = MutableStateFlow<ExerciseRecommendation?>(null)
+    val exerciseRecommendationForJournal: StateFlow<ExerciseRecommendation?> = _exerciseRecommendationForJournal.asStateFlow()
 
     val journalSplitDayOptions: StateFlow<List<Pair<Int, String>>> = trainerSettings
         .map { trainerEngine.getSplitDayOptions(it) }
@@ -324,6 +328,30 @@ class WorkoutViewModel(application: Application) : AndroidViewModel(application)
 
     fun getAlternatives(exercise: Exercise): List<Exercise> {
         return trainerEngine.getAlternatives(exercise, allExercises.value)
+    }
+
+    /** Загружает рекомендацию по упражнению для отображения в диалоге добавления записи (совет тренера). */
+    fun loadExerciseRecommendationForJournal(exerciseName: String?) {
+        viewModelScope.launch {
+            if (exerciseName == null) {
+                _exerciseRecommendationForJournal.value = null
+                return@launch
+            }
+            val exercise = allExercises.value.find { it.name == exerciseName } ?: run {
+                _exerciseRecommendationForJournal.value = null
+                return@launch
+            }
+            _exerciseRecommendationForJournal.value = trainerEngine.getRecommendationForExercise(
+                exercise = exercise,
+                history = allEntries.value,
+                trainingGoal = trainingGoal.value,
+                settings = trainerSettings.value
+            )
+        }
+    }
+
+    fun clearExerciseRecommendationForJournal() {
+        _exerciseRecommendationForJournal.value = null
     }
 
     fun askAi() {
