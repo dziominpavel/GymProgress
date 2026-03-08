@@ -9,16 +9,12 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.material.icons.filled.List
-import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Star
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
-import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteDefaults
-import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -26,27 +22,27 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.text.font.FontWeight
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.gymprogress.ui.navigation.AppNavigationScaffold
 import com.example.gymprogress.ui.screens.AboutScreen
 import com.example.gymprogress.ui.screens.AddEntryDialog
 import com.example.gymprogress.ui.screens.ExercisesScreen
 import com.example.gymprogress.ui.screens.JournalScreen
 import com.example.gymprogress.ui.screens.SettingsScreen
 import com.example.gymprogress.ui.screens.StatsScreen
+import com.example.gymprogress.data.CompletedSet
 import com.example.gymprogress.ui.screens.ActiveWorkoutScreen
-import com.example.gymprogress.ui.screens.CompletedSet
 import com.example.gymprogress.ui.screens.TrainerScreen
 import com.example.gymprogress.ui.screens.TrainerSettingsScreen
 import com.example.gymprogress.ui.screens.WorkoutHistoryScreen
-import com.example.gymprogress.data.SetType
 import com.example.gymprogress.data.WorkoutRecommendation
 import com.example.gymprogress.ui.theme.GymProgressTheme
+import com.example.gymprogress.data.FormatUtils
 import com.example.gymprogress.viewmodel.WorkoutViewModel
 import java.time.LocalDate
-import java.time.format.DateTimeFormatter
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -62,9 +58,10 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun GymProgressApp(viewModel: WorkoutViewModel = viewModel()) {
+    // Navigation state: tab, modals, overlays
     var currentDestination by rememberSaveable { mutableStateOf(AppDestinations.JOURNAL) }
-    var showAddDialog by rememberSaveable { mutableStateOf(false) }
     var showMoreMenu by remember { mutableStateOf(false) }
+    var showAddDialog by rememberSaveable { mutableStateOf(false) }
     var showSettings by rememberSaveable { mutableStateOf(false) }
     var showAbout by rememberSaveable { mutableStateOf(false) }
     var showTrainer by rememberSaveable { mutableStateOf(false) }
@@ -75,10 +72,9 @@ fun GymProgressApp(viewModel: WorkoutViewModel = viewModel()) {
 
     val entries by viewModel.allEntries.collectAsState()
     val todayEntries = remember(entries) {
-        val today = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
+        val today = FormatUtils.toStorageDate(LocalDate.now())
         entries.filter { it.date == today }
     }
-    val exerciseNames by viewModel.exerciseNames.collectAsState()
     val selectedExercise by viewModel.selectedExercise.collectAsState()
     val entriesForExercise by viewModel.entriesForSelectedExercise.collectAsState()
     val allExercises by viewModel.allExercises.collectAsState()
@@ -89,7 +85,25 @@ fun GymProgressApp(viewModel: WorkoutViewModel = viewModel()) {
     val workoutRecommendation by viewModel.workoutRecommendation.collectAsState()
     val aiAdvice by viewModel.aiAdvice.collectAsState()
     val aiLoading by viewModel.aiLoading.collectAsState()
+    val errorMessage by viewModel.errorMessage.collectAsState()
+    val snackbarHostState = remember { SnackbarHostState() }
 
+    LaunchedEffect(errorMessage) {
+        errorMessage?.let { msg ->
+            snackbarHostState.showSnackbar(msg, duration = SnackbarDuration.Short)
+            viewModel.clearError()
+        }
+    }
+
+    // Resolve active workout state before branching
+    if (showActiveWorkout && activeWorkoutRec == null && workoutRecommendation != null) {
+        activeWorkoutRec = workoutRecommendation
+    }
+    if (showActiveWorkout && activeWorkoutRec == null) {
+        showActiveWorkout = false
+    }
+
+    // Full-screen overlays: early returns are safe here (composable body, not a lambda)
     if (showWorkoutHistory) {
         BackHandler { showWorkoutHistory = false }
         WorkoutHistoryScreen(
@@ -144,13 +158,6 @@ fun GymProgressApp(viewModel: WorkoutViewModel = viewModel()) {
         return
     }
 
-    if (showActiveWorkout && activeWorkoutRec == null && workoutRecommendation != null) {
-        activeWorkoutRec = workoutRecommendation
-    }
-    if (showActiveWorkout && activeWorkoutRec == null) {
-        showActiveWorkout = false
-    }
-
     if (showActiveWorkout && activeWorkoutRec != null) {
         BackHandler {
             showActiveWorkout = false
@@ -159,7 +166,7 @@ fun GymProgressApp(viewModel: WorkoutViewModel = viewModel()) {
         ActiveWorkoutScreen(
             recommendation = activeWorkoutRec!!,
             onFinish = { completedSets ->
-                saveCompletedSets(completedSets, viewModel)
+                viewModel.saveCompletedWorkout(completedSets)
                 showActiveWorkout = false
                 activeWorkoutRec = null
             },
@@ -195,87 +202,22 @@ fun GymProgressApp(viewModel: WorkoutViewModel = viewModel()) {
         return
     }
 
-    NavigationSuiteScaffold(
-        navigationSuiteItems = {
-            AppDestinations.entries.forEach {
-                item(
-                    icon = {
-                        Icon(
-                            it.icon,
-                            contentDescription = it.label
-                        )
-                    },
-                    label = {
-                        Text(
-                            it.label,
-                            fontWeight = if (it == currentDestination) FontWeight.Bold
-                            else FontWeight.Normal
-                        )
-                    },
-                    selected = it == currentDestination,
-                    onClick = { currentDestination = it }
-                )
-            }
-            item(
-                icon = {
-                    Box {
-                        Icon(
-                            Icons.Default.MoreVert,
-                            contentDescription = "Ещё"
-                        )
-                        DropdownMenu(
-                            expanded = showMoreMenu,
-                            onDismissRequest = { showMoreMenu = false }
-                        ) {
-                            DropdownMenuItem(
-                                text = { Text("Тренер") },
-                                onClick = {
-                                    showMoreMenu = false
-                                    showTrainer = true
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("История тренировок") },
-                                onClick = {
-                                    showMoreMenu = false
-                                    showWorkoutHistory = true
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Настройки") },
-                                onClick = {
-                                    showMoreMenu = false
-                                    showSettings = true
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("О приложении") },
-                                onClick = {
-                                    showMoreMenu = false
-                                    showAbout = true
-                                }
-                            )
-                        }
-                    }
-                },
-                label = {
-                    Text(
-                        "Ещё",
-                        fontWeight = FontWeight.Normal
-                    )
-                },
-                selected = false,
-                onClick = { showMoreMenu = !showMoreMenu }
-            )
-        },
-        navigationSuiteColors = NavigationSuiteDefaults.colors(
-            navigationBarContainerColor = MaterialTheme.colorScheme.surface,
-            navigationBarContentColor = MaterialTheme.colorScheme.onSurface
-        )
-    ) {
-        when (currentDestination) {
-            AppDestinations.JOURNAL -> {
-                JournalScreen(
+    // Main navigation + snackbar for DB errors
+    Box(modifier = Modifier.fillMaxSize()) {
+        AppNavigationScaffold(
+            currentDestination = currentDestination,
+            onDestinationChange = { currentDestination = it },
+            moreMenuExpanded = showMoreMenu,
+            onMoreMenuDismiss = { showMoreMenu = false },
+            onMoreMenuToggle = { showMoreMenu = !showMoreMenu },
+            onOpenTrainer = { showTrainer = true },
+            onOpenHistory = { showWorkoutHistory = true },
+            onOpenSettings = { showSettings = true },
+            onOpenAbout = { showAbout = true },
+            modifier = Modifier.fillMaxSize()
+        ) { destination ->
+            when (destination) {
+                AppDestinations.JOURNAL -> JournalScreen(
                     entries = todayEntries,
                     exercises = allExercises,
                     bodyWeightKg = bodyWeightKg,
@@ -284,9 +226,7 @@ fun GymProgressApp(viewModel: WorkoutViewModel = viewModel()) {
                     onUpdateEntry = { viewModel.updateEntry(it) },
                     modifier = Modifier.fillMaxSize()
                 )
-            }
-            AppDestinations.EXERCISES -> {
-                ExercisesScreen(
+                AppDestinations.EXERCISES -> ExercisesScreen(
                     exercises = allExercises,
                     onAddExercise = { name, group, type, isBodyweight ->
                         viewModel.addExercise(name, group, type, isBodyweight)
@@ -295,9 +235,7 @@ fun GymProgressApp(viewModel: WorkoutViewModel = viewModel()) {
                     onUpdateExercise = { viewModel.updateExercise(it) },
                     modifier = Modifier.fillMaxSize()
                 )
-            }
-            AppDestinations.STATS -> {
-                StatsScreen(
+                AppDestinations.STATS -> StatsScreen(
                     exercises = allExercises,
                     selectedExercise = selectedExercise,
                     entriesForExercise = entriesForExercise,
@@ -309,6 +247,11 @@ fun GymProgressApp(viewModel: WorkoutViewModel = viewModel()) {
                 )
             }
         }
+
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier.align(Alignment.BottomCenter)
+        )
     }
 
     if (showAddDialog) {
@@ -323,37 +266,6 @@ fun GymProgressApp(viewModel: WorkoutViewModel = viewModel()) {
                 showAddDialog = false
             }
         )
-    }
-}
-
-private fun saveCompletedSets(
-    completedSets: List<CompletedSet>,
-    viewModel: WorkoutViewModel
-) {
-    val today = java.time.LocalDate.now()
-        .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd"))
-
-    val workingSets = completedSets.filter { it.setType == SetType.WORKING }
-    val grouped = workingSets.groupBy { it.exerciseName }
-
-    grouped.forEach { (name, sets) ->
-        val distinctWeights = sets.map { it.weight }.distinct()
-        if (distinctWeights.size == 1) {
-            val reps = sets.joinToString(",") { it.reps.toString() }
-            viewModel.addEntry(today, name, distinctWeights.first(), reps)
-        } else {
-            val mainWeight = sets.groupBy { it.weight }
-                .maxByOrNull { it.value.size }?.key ?: sets.first().weight
-            val mainSets = sets.filter { it.weight == mainWeight }
-            val reps = mainSets.joinToString(",") { it.reps.toString() }
-            viewModel.addEntry(today, name, mainWeight, reps)
-
-            val otherGroups = sets.filter { it.weight != mainWeight }.groupBy { it.weight }
-            otherGroups.forEach { (w, wSets) ->
-                val otherReps = wSets.joinToString(",") { it.reps.toString() }
-                viewModel.addEntry(today, name, w, otherReps)
-            }
-        }
     }
 }
 

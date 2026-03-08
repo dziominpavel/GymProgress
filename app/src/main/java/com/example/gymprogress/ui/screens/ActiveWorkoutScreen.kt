@@ -52,6 +52,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.example.gymprogress.data.ExerciseRecommendation
 import com.example.gymprogress.data.MuscleGroup
+import com.example.gymprogress.data.CompletedSet
 import com.example.gymprogress.data.SetType
 import com.example.gymprogress.data.WorkoutRecommendation
 import com.example.gymprogress.data.FormatUtils
@@ -59,13 +60,6 @@ import com.example.gymprogress.ui.theme.CardShape
 import com.example.gymprogress.ui.theme.Spacing
 import com.example.gymprogress.ui.theme.Volt
 import kotlinx.coroutines.delay
-
-data class CompletedSet(
-    val exerciseName: String,
-    val weight: Double,
-    val reps: Int,
-    val setType: SetType
-)
 
 @Composable
 fun ActiveWorkoutScreen(

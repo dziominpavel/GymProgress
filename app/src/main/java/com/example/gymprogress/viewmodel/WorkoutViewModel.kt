@@ -5,9 +5,12 @@ import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.gymprogress.data.AppDatabase
+import com.example.gymprogress.data.CompletedSet
 import com.example.gymprogress.data.Exercise
 import com.example.gymprogress.data.ExerciseType
+import com.example.gymprogress.data.FormatUtils
 import com.example.gymprogress.data.AiService
+import com.example.gymprogress.data.SetType
 import com.example.gymprogress.data.SettingsRepository
 import com.example.gymprogress.data.TrainerRecommendationEngine
 import com.example.gymprogress.data.TrainerSettings
@@ -25,6 +28,7 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import java.time.LocalDate
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class WorkoutViewModel(application: Application) : AndroidViewModel(application) {
@@ -43,6 +47,13 @@ class WorkoutViewModel(application: Application) : AndroidViewModel(application)
 
     private val _aiLoading = MutableStateFlow(false)
     val aiLoading: StateFlow<Boolean> = _aiLoading.asStateFlow()
+
+    private val _errorMessage = MutableStateFlow<String?>(null)
+    val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
+
+    fun clearError() {
+        _errorMessage.value = null
+    }
 
     val allEntries: StateFlow<List<WorkoutEntry>> = workoutDao.getAllEntries()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -104,6 +115,7 @@ class WorkoutViewModel(application: Application) : AndroidViewModel(application)
                     )
                 )
             } catch (e: Exception) {
+                _errorMessage.value = e.message ?: "Не удалось добавить запись"
                 Log.e(TAG, "Failed to add entry", e)
             }
         }
@@ -114,6 +126,7 @@ class WorkoutViewModel(application: Application) : AndroidViewModel(application)
             try {
                 workoutDao.update(entry)
             } catch (e: Exception) {
+                _errorMessage.value = e.message ?: "Не удалось обновить запись"
                 Log.e(TAG, "Failed to update entry", e)
             }
         }
@@ -124,6 +137,7 @@ class WorkoutViewModel(application: Application) : AndroidViewModel(application)
             try {
                 workoutDao.delete(entry)
             } catch (e: Exception) {
+                _errorMessage.value = e.message ?: "Не удалось удалить запись"
                 Log.e(TAG, "Failed to delete entry", e)
             }
         }
@@ -150,6 +164,7 @@ class WorkoutViewModel(application: Application) : AndroidViewModel(application)
                     )
                 )
             } catch (e: Exception) {
+                _errorMessage.value = e.message ?: "Не удалось добавить упражнение"
                 Log.e(TAG, "Failed to add exercise", e)
             }
         }
@@ -160,6 +175,7 @@ class WorkoutViewModel(application: Application) : AndroidViewModel(application)
             try {
                 exerciseDao.update(exercise)
             } catch (e: Exception) {
+                _errorMessage.value = e.message ?: "Не удалось обновить упражнение"
                 Log.e(TAG, "Failed to update exercise", e)
             }
         }
@@ -170,6 +186,7 @@ class WorkoutViewModel(application: Application) : AndroidViewModel(application)
             try {
                 exerciseDao.delete(exercise)
             } catch (e: Exception) {
+                _errorMessage.value = e.message ?: "Не удалось удалить упражнение"
                 Log.e(TAG, "Failed to delete exercise", e)
             }
         }
@@ -180,6 +197,7 @@ class WorkoutViewModel(application: Application) : AndroidViewModel(application)
             try {
                 settingsRepository.setTrainingGoal(goal)
             } catch (e: Exception) {
+                _errorMessage.value = e.message ?: "Не удалось сохранить цель"
                 Log.e(TAG, "Failed to set training goal", e)
             }
         }
@@ -190,6 +208,7 @@ class WorkoutViewModel(application: Application) : AndroidViewModel(application)
             try {
                 settingsRepository.setBodyWeightKg(value)
             } catch (e: Exception) {
+                _errorMessage.value = e.message ?: "Не удалось сохранить вес"
                 Log.e(TAG, "Failed to set body weight", e)
             }
         }
@@ -200,6 +219,7 @@ class WorkoutViewModel(application: Application) : AndroidViewModel(application)
             try {
                 settingsRepository.updateTrainerSettings(settings)
             } catch (e: Exception) {
+                _errorMessage.value = e.message ?: "Не удалось сохранить настройки тренера"
                 Log.e(TAG, "Failed to update trainer settings", e)
             }
         }
@@ -235,6 +255,32 @@ class WorkoutViewModel(application: Application) : AndroidViewModel(application)
 
     fun clearAiAdvice() {
         _aiAdvice.value = null
+    }
+
+    fun saveCompletedWorkout(completedSets: List<CompletedSet>) {
+        val today = FormatUtils.toStorageDate(LocalDate.now())
+        val workingSets = completedSets.filter { it.setType == SetType.WORKING }
+        val grouped = workingSets.groupBy { it.exerciseName }
+
+        grouped.forEach { (name, sets) ->
+            val distinctWeights = sets.map { it.weight }.distinct()
+            if (distinctWeights.size == 1) {
+                val reps = sets.joinToString(",") { it.reps.toString() }
+                addEntry(today, name, distinctWeights.first(), reps)
+            } else {
+                val mainWeight = sets.groupBy { it.weight }
+                    .maxByOrNull { it.value.size }?.key ?: sets.first().weight
+                val mainSets = sets.filter { it.weight == mainWeight }
+                val reps = mainSets.joinToString(",") { it.reps.toString() }
+                addEntry(today, name, mainWeight, reps)
+
+                val otherGroups = sets.filter { it.weight != mainWeight }.groupBy { it.weight }
+                otherGroups.forEach { (w, wSets) ->
+                    val otherReps = wSets.joinToString(",") { it.reps.toString() }
+                    addEntry(today, name, w, otherReps)
+                }
+            }
+        }
     }
 
     companion object {

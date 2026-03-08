@@ -57,16 +57,10 @@ import com.example.gymprogress.ui.theme.Volt
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.YearMonth
-import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
 import java.util.Locale
 
-private val whStorageFmt: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
-private val whDisplayFmt: DateTimeFormatter = DateTimeFormatter.ofPattern("dd.MM.yyyy")
-
-private fun whParseDate(s: String): LocalDate =
-    runCatching { LocalDate.parse(s, whStorageFmt) }
-        .getOrElse { runCatching { LocalDate.parse(s, whDisplayFmt) }.getOrElse { LocalDate.MIN } }
+private fun whParseDate(s: String): LocalDate = FormatUtils.parseStorageDate(s) ?: LocalDate.MIN
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
 @Composable
@@ -159,7 +153,7 @@ fun WorkoutHistoryScreen(
             ) {
                 if (selectedDate != null) {
                     Text(
-                        text = FormatUtils.formatDate(selectedDate!!.format(whStorageFmt)),
+                        text = FormatUtils.formatDate(FormatUtils.toStorageDate(selectedDate!!)),
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold,
                         color = Volt,
