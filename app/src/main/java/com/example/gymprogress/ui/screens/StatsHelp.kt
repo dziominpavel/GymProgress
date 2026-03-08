@@ -68,26 +68,45 @@ internal fun ScoreFormulaHelpDialog(onDismiss: () -> Unit) {
                 ) {
                     // --- Итоговый балл ---
                     HelpHeader("📊 Балл: 100 = ваш рекорд")
-                    Text("100 баллов = ваша лучшая сессия в истории. Первая тренировка = 100. Побили рекорд — получите 105, 112 и т.д. Прогресс в % — сравнение со средним за 3 сессии.",
+                    Text("100 баллов ≈ все компоненты на уровне вашего лучшего. Первая тренировка = 100. Побили рекорд — получите 105, 112 и т.д. Прогресс в % — сравнение со средним за 3 сессии.",
                         style = MaterialTheme.typography.bodySmall)
                     Spacer(modifier = Modifier.height(8.dp))
-                    HelpFormula("Балл = (метрика / ваш_рекорд) × 100 − штраф_усталости\nРекорд = макс. метрика в истории (без сегодня)")
+                    HelpFormula("Гипертрофия: Стимул = напряжение × W1 + продуктивность × W2 + качество × W3\nСила / Выносливость: метрика / ваш_рекорд × 100")
                     Spacer(modifier = Modifier.height(6.dp))
                     HelpNote("95 = чуть не дотянул до своего лучшего. 100 = рекорд. 112 = побил рекорд на 12%.")
                     Spacer(modifier = Modifier.height(20.dp))
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                     Spacer(modifier = Modifier.height(20.dp))
 
-                    // --- Метрики по целям ---
-                    HelpHeader("🎯 Метрика по цели")
-                    Text("Для каждой цели используется своя метрика:",
+                    // --- Гипертрофия v2.5 ---
+                    HelpHeader("💪 Гипертрофия: 3 компонента стимула")
+                    Text("Для гипертрофии балл складывается из трёх факторов, а не только из объёма. Тяжёлая работа в рабочем диапазоне не будет несправедливо снижена.",
                         style = MaterialTheme.typography.bodySmall)
                     Spacer(modifier = Modifier.height(6.dp))
-                    HelpRow("Гипертрофия", "Объём = вес × сумма повторений")
+                    HelpRow("Напряжение", "Вес / лучший вес в истории")
+                    HelpRow("Продуктивность", "√(стимул-единицы / лучшие)")
+                    HelpRow("Качество", "Среднее попадание в продуктивную зону")
+                    Spacer(modifier = Modifier.height(6.dp))
+                    HelpFormula("Базовые: 55% напряжение + 25% продуктивность + 20% качество\nИзолирующие: 30% напряжение + 45% продуктивность + 25% качество")
+                    Spacer(modifier = Modifier.height(6.dp))
+                    HelpNote("Увеличили вес и все повторы в зоне? Это прогресс, даже если тоннаж чуть ниже.")
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    // --- Продуктивная зона ---
+                    HelpHeader("🎯 Продуктивная зона повторений")
+                    Text("Для гипертрофии «хороший» диапазон шире, чем классические 8–12:",
+                        style = MaterialTheme.typography.bodySmall)
+                    Spacer(modifier = Modifier.height(6.dp))
+                    HelpRow("Базовые: 5–10", "идеально (1.0)")
+                    HelpRow("Базовые: 11–15", "отлично (0.95)")
+                    HelpRow("Базовые: 3–4", "допустимо (0.75)")
+                    HelpRow("Изолирующие: 8–15", "идеально (1.0)")
+                    HelpRow("Изолирующие: 16–20", "отлично (0.95)")
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    HelpHeader("🎯 Сила и выносливость")
                     HelpRow("Сила", "E1RM = оценочный 1RM по лучшему подходу (Epley)")
                     HelpRow("Выносливость", "Объём = вес × сумма повторений")
-                    Spacer(modifier = Modifier.height(6.dp))
-                    HelpExample("Подтягивания 4×8 → 4×9: объём +12.5% → прогресс +12.5%")
                     Spacer(modifier = Modifier.height(20.dp))
 
                     // --- Сравнение ---
@@ -95,7 +114,7 @@ internal fun ScoreFormulaHelpDialog(onDismiss: () -> Unit) {
                     Text("Текущая сессия сравнивается со средним за последние 3 сессии (не с одной прошлой).",
                         style = MaterialTheme.typography.bodySmall)
                     Spacer(modifier = Modifier.height(6.dp))
-                    HelpFormula("Прогресс % = (метрика_сегодня − среднее_за_3) / среднее_за_3 × 100")
+                    HelpFormula("Прогресс % = (стимул_сегодня − среднее_за_3) / среднее_за_3 × 100")
                     Spacer(modifier = Modifier.height(6.dp))
                     HelpRow("▲ Лучше", "≥ +5%")
                     HelpRow("→ Без изменений", "от −5% до +5%")
@@ -106,14 +125,14 @@ internal fun ScoreFormulaHelpDialog(onDismiss: () -> Unit) {
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                     Spacer(modifier = Modifier.height(20.dp))
 
-                    // --- Качество повторений ---
-                    HelpHeader("⭐ Качество повторений")
-                    Text("Влияет на итог: попадание в целевой диапазон по цели.",
+                    // --- Защита от ложного минуса ---
+                    HelpHeader("🛡️ Защита: тяжёлая работа в зоне")
+                    Text("Если вы увеличили вес ≥5%, все подходы в продуктивной зоне, а объём не обвалился — алгоритм не поставит ▼ Хуже.",
                         style = MaterialTheme.typography.bodySmall)
                     Spacer(modifier = Modifier.height(6.dp))
-                    HelpRow("В целевом диапазоне (8–12 для гипертрофии)", "1.0")
-                    HelpRow("Близко к диапазону", "0.6")
-                    HelpRow("За пределами диапазона", "0.3")
+                    HelpExample("Присед: 60 кг × 10,12,11,12 → 70 кг × 8,8,8,9\nСтарая оценка: −8%. Новая: +5% (напряжение выросло)")
+                    Spacer(modifier = Modifier.height(20.dp))
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                     Spacer(modifier = Modifier.height(20.dp))
 
                     // --- Штраф за усталость ---
@@ -133,9 +152,11 @@ internal fun ScoreFormulaHelpDialog(onDismiss: () -> Unit) {
 
                     // --- Что отображается ---
                     HelpHeader("🔢 Что означают числа")
-                    HelpRow("Балл (100 = рекорд)", "Оценка сессии относительно вашего лучшего")
-                    HelpRow("Δ (+12.5%)", "Прогресс vs среднее за 3 сессии")
-                    HelpRow("Причина", "Краткая подсказка (Объём ↑, E1RM ↓ и т.д.)")
+                    HelpRow("Стимул (100 = рекорд)", "Гипертрофия: составной балл сессии")
+                    HelpRow("Напряжение", "% от вашего лучшего веса")
+                    HelpRow("Продуктивность", "√(стимул-единицы / лучшие)")
+                    HelpRow("Δ (+5.7%)", "Прогресс vs среднее за 3 сессии")
+                    HelpRow("Причина", "Подсказка (Напряжение ↑, Качество ↓ и т.д.)")
                     Spacer(modifier = Modifier.height(8.dp))
                 }
                 Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {

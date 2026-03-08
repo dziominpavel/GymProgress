@@ -126,10 +126,12 @@ internal fun HistoryRow(
 
     val isMax = entry.weight == maxWeight
     val statusColor = when (comparison.status) {
-        ProgressStatus.BETTER -> Color(0xFF4CAF50)
-        ProgressStatus.WORSE -> MaterialTheme.colorScheme.error
-        ProgressStatus.SAME -> MaterialTheme.colorScheme.onSurfaceVariant
         ProgressStatus.FIRST -> Volt
+        else -> when {
+            comparison.deltaPercent >= 1.0 -> Color(0xFF4CAF50)
+            comparison.deltaPercent <= -1.0 -> MaterialTheme.colorScheme.error
+            else -> MaterialTheme.colorScheme.onSurfaceVariant
+        }
     }
     val statusIcon = when (comparison.status) {
         ProgressStatus.BETTER -> "\u25B2"
@@ -309,9 +311,16 @@ internal fun ScoreDetailDialog(
                 val metricStr = when (d.metricType.displayName) {
                     "Объём" -> "${FormatUtils.formatVolume(c.metricValue)} кг"
                     "E1RM" -> "${FormatUtils.formatWeight(c.metricValue)} кг"
+                    "Стимул" -> "${c.metricValue.toInt()} / 100"
                     else -> "${c.metricValue.toInt()} повт."
                 }
                 ScoreRow("📊 ${c.metricLabel}", metricStr, null, null)
+                if (c.tensionScore != null) {
+                    ScoreRow("💪 Напряжение", "${(c.tensionScore * 100).toInt()}%", null, null)
+                }
+                if (c.productiveScore != null) {
+                    ScoreRow("🔄 Продуктивность", "${(c.productiveScore * 100).toInt()}%", null, null)
+                }
                 ScoreRow("🔁 Подходы × Повторы", "${d.currentSets} × [${d.currentReps.joinToString(", ")}]", null, null)
                 ScoreRow("⭐ Качество (${d.targetRange})", "${(d.currentRepQuality * 100).toInt()}%", null, null)
                 if (c.fatiguePenalty > 0) ScoreRow("⚠️ Усталость", "Неравномерность", null, -c.fatiguePenalty)
@@ -324,6 +333,7 @@ internal fun ScoreDetailDialog(
                     val baselineMetricStr = when (d.metricType.displayName) {
                         "Объём" -> FormatUtils.formatVolume(d.baselineMetric)
                         "E1RM" -> FormatUtils.formatWeight(d.baselineMetric)
+                        "Стимул" -> d.baselineMetric.toInt().toString()
                         else -> d.baselineMetric.toInt().toString()
                     }
                     ScoreRow("📊 ${c.metricLabel}", "$metricStr (база: $baselineMetricStr)", null, null)
@@ -417,8 +427,8 @@ internal fun ScoreRowPct(
     val effectivePct = overridePct ?: computedPct
     val pctColor = when {
         effectivePct == null -> MaterialTheme.colorScheme.onSurfaceVariant
-        effectivePct > 0.5 -> Color(0xFF4CAF50)
-        effectivePct < -0.5 -> MaterialTheme.colorScheme.error
+        effectivePct >= 1.0 -> Color(0xFF4CAF50)
+        effectivePct <= -1.0 -> MaterialTheme.colorScheme.error
         else -> MaterialTheme.colorScheme.onSurfaceVariant
     }
     Row(
@@ -631,10 +641,12 @@ internal fun WorkoutDayReportView(
         val hasPrev = report.previousOverallScore != null
         val pct = report.overallDeltaPercent
         val statusColor = when (report.overallStatus) {
-            ProgressStatus.BETTER -> Color(0xFF4CAF50)
-            ProgressStatus.WORSE -> MaterialTheme.colorScheme.error
-            ProgressStatus.SAME -> MaterialTheme.colorScheme.onSurfaceVariant
             ProgressStatus.FIRST -> Volt
+            else -> when {
+                pct >= 1.0 -> Color(0xFF4CAF50)
+                pct <= -1.0 -> MaterialTheme.colorScheme.error
+                else -> MaterialTheme.colorScheme.onSurfaceVariant
+            }
         }
         val statusIcon = when (report.overallStatus) {
             ProgressStatus.BETTER -> "▲"; ProgressStatus.WORSE -> "▼"
@@ -690,10 +702,12 @@ internal fun ExerciseDayRow(ex: ExerciseDayScore) {
     var expanded by remember { mutableStateOf(false) }
     val hasPrev = ex.previousEntry != null && ex.currentEntry != null
     val statusColor = when (ex.status) {
-        ProgressStatus.BETTER -> Color(0xFF4CAF50)
-        ProgressStatus.WORSE -> MaterialTheme.colorScheme.error
-        ProgressStatus.SAME -> MaterialTheme.colorScheme.onSurfaceVariant
         ProgressStatus.FIRST -> Volt
+        else -> when {
+            ex.deltaPercent >= 1.0 -> Color(0xFF4CAF50)
+            ex.deltaPercent <= -1.0 -> MaterialTheme.colorScheme.error
+            else -> MaterialTheme.colorScheme.onSurfaceVariant
+        }
     }
     val statusIcon = when (ex.status) {
         ProgressStatus.BETTER -> "▲"; ProgressStatus.WORSE -> "▼"
@@ -769,8 +783,8 @@ internal fun ExerciseDayRow(ex: ExerciseDayScore) {
                         modifier = Modifier.weight(1f), fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface)
                     val pctColor = when {
-                        ex.deltaPercent > 0 -> Color(0xFF4CAF50)
-                        ex.deltaPercent < 0 -> MaterialTheme.colorScheme.error
+                        ex.deltaPercent >= 1.0 -> Color(0xFF4CAF50)
+                        ex.deltaPercent <= -1.0 -> MaterialTheme.colorScheme.error
                         else -> MaterialTheme.colorScheme.onSurfaceVariant
                     }
                     val sign = if (ex.deltaPercent >= 0) "+" else ""
@@ -800,8 +814,8 @@ internal fun DayComponentRow(
     }
     val pctColor = when {
         pct == null -> MaterialTheme.colorScheme.onSurfaceVariant
-        pct > 0.5 -> Color(0xFF4CAF50)
-        pct < -0.5 -> MaterialTheme.colorScheme.error
+        pct >= 1.0 -> Color(0xFF4CAF50)
+        pct <= -1.0 -> MaterialTheme.colorScheme.error
         else -> MaterialTheme.colorScheme.onSurfaceVariant
     }
     Row(

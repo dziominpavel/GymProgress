@@ -1,6 +1,7 @@
 package com.example.gymprogress.data
 
 import kotlin.math.abs
+import kotlin.math.sqrt
 
 enum class ProgressStatus {
     BETTER, SAME, WORSE, FIRST
@@ -10,7 +11,8 @@ enum class ProgressStatus {
 enum class ProgressMetricType(val displayName: String) {
     VOLUME("Объём"),
     E1RM("E1RM"),
-    TOTAL_REPS("Повторы")
+    TOTAL_REPS("Повторы"),
+    STIMULUS("Стимул")
 }
 
 /** Упрощённые компоненты для отображения причины */
@@ -19,7 +21,9 @@ data class ScoreComponents(
     val metricLabel: String,
     val repQuality: Double,
     val fatiguePenalty: Double,
-    val totalScore: Int
+    val totalScore: Int,
+    val tensionScore: Double? = null,
+    val productiveScore: Double? = null
 )
 
 data class SessionScore(
@@ -153,10 +157,123 @@ object WorkoutScoreCalculator {
         }
     }
 
+    // ── Hypertrophy v2.5 helpers ────────────────────────────────────────
+
+    private fun getHypertrophyZoneCoefficient(reps: Int, exerciseType: ExerciseType): Double {
+        return when (exerciseType) {
+            ExerciseType.COMPOUND -> when (reps) {
+                in 5..10 -> 1.00
+                in 11..15 -> 0.95
+                in 3..4 -> 0.75
+                in 16..20 -> 0.80
+                else -> 0.50
+            }
+            ExerciseType.ISOLATION -> when (reps) {
+                in 8..15 -> 1.00
+                in 6..7 -> 0.90
+                in 16..20 -> 0.95
+                in 21..30 -> 0.75
+                else -> 0.50
+            }
+        }
+    }
+
+    private fun calcHypertrophyStimulusUnits(repsList: List<Int>, exerciseType: ExerciseType): Double {
+        return repsList.sumOf { reps -> reps * getHypertrophyZoneCoefficient(reps, exerciseType) }
+    }
+
+    private fun calcHypertrophyRepQuality(repsList: List<Int>, exerciseType: ExerciseType): Double {
+        if (repsList.isEmpty()) return 1.0
+        return repsList.map { getHypertrophyZoneCoefficient(it, exerciseType) }.average()
+    }
+
+    private fun calcHypertrophySessionScore(
+        entry: WorkoutEntry,
+        reps: List<Int>,
+        history: List<WorkoutEntry>,
+        exerciseType: ExerciseType
+    ): SessionScore {
+        val currentUnits = calcHypertrophyStimulusUnits(reps, exerciseType)
+        val repQuality = calcHypertrophyRepQuality(reps, exerciseType)
+        val fatiguePenalty = calcFatiguePenalty(reps)
+
+        val historyExcludingCurrent = history.filter { it.id != entry.id }
+
+        val bestWeight = historyExcludingCurrent.maxOfOrNull { it.weight } ?: entry.weight
+        val tensionScore = if (bestWeight > 0) entry.weight / bestWeight else 1.0
+
+        val bestUnits = historyExcludingCurrent.maxOfOrNull {
+            calcHypertrophyStimulusUnits(parseReps(it), exerciseType)
+        } ?: currentUnits
+        val productiveScore = if (bestUnits > 0) sqrt(currentUnits / bestUnits) else 1.0
+
+        val (wT, wP, wR) = when (exerciseType) {
+            ExerciseType.COMPOUND -> Triple(0.55, 0.25, 0.20)
+            ExerciseType.ISOLATION -> Triple(0.30, 0.45, 0.25)
+        }
+
+        val compositeRaw = wT * tensionScore + wP * productiveScore + wR * repQuality
+        val rawMetric = compositeRaw * RECORD_SCORE
+        val score = (rawMetric - fatiguePenalty * 10).toInt().coerceIn(0, MAX_SCORE)
+
+        val components = ScoreComponents(
+            metricValue = rawMetric,
+            metricLabel = ProgressMetricType.STIMULUS.displayName,
+            repQuality = repQuality,
+            fatiguePenalty = fatiguePenalty,
+            totalScore = score,
+            tensionScore = tensionScore,
+            productiveScore = productiveScore
+        )
+
+        return SessionScore(score, rawMetric, ProgressMetricType.STIMULUS, repQuality, fatiguePenalty, components)
+    }
+
     /**
-     * Балл сессии: 100 = личный рекорд.
-     * yourBest = max(metric в истории БЕЗ текущей) или metric при первой сессии.
-     * score = (metric / yourBest) × 100 − fatiguePenalty×10, cap 0–1000.
+     * Guardrail: тяжёлая работа в продуктивной зоне не может быть WORSE.
+     * Возвращает (новый статус, причина) или null если guardrail не применяется.
+     */
+    private fun applyHypertrophyGuardrail(
+        current: WorkoutEntry,
+        curReps: List<Int>,
+        exerciseType: ExerciseType,
+        trendEntries: List<WorkoutEntry>
+    ): Pair<ProgressStatus, String>? {
+        if (curReps.isEmpty() || trendEntries.isEmpty()) return null
+
+        // Rule C: сверхтяжёлые синглы/дабллы (1–3) не гипертрофийный прогресс
+        if (curReps.all { it <= 3 }) return null
+
+        val avgPrevWeight = trendEntries.map { it.weight }.average()
+        val weightIncrease = if (avgPrevWeight > 0) current.weight / avgPrevWeight else 1.0
+
+        val allInProductiveZone = curReps.all {
+            getHypertrophyZoneCoefficient(it, exerciseType) >= 0.75
+        }
+
+        val prevTotalReps = trendEntries.map { parseReps(it).sum().toDouble() }.average()
+        val curTotalReps = curReps.sum().toDouble()
+        val repsDropPercent = if (prevTotalReps > 0) (1.0 - curTotalReps / prevTotalReps) else 0.0
+
+        val avgPrevPenalty = trendEntries.map { calcFatiguePenalty(parseReps(it)) }.average()
+        val curPenalty = calcFatiguePenalty(curReps)
+        val penaltyIncrease = curPenalty - avgPrevPenalty
+
+        // Rule A: вес вырос ≥5%, повторы в зоне, объём не обвалился, усталость не выросла
+        if (weightIncrease >= 1.05 && allInProductiveZone && repsDropPercent <= 0.30 && penaltyIncrease <= 0.03) {
+            return ProgressStatus.SAME to "Тяжёлая работа в продуктивной зоне"
+        }
+
+        return null
+    }
+
+    // ── Session score (public API) ──────────────────────────────────────
+
+    /**
+     * Балл сессии.
+     * Hypertrophy v2.5: composite = tension × wT + productive × wP + repQuality × wR.
+     * Strength / Endurance: legacy metric / yourBest × 100.
+     * 100 ≈ личный рекорд по всем компонентам; cap 0–1000.
      */
     fun calcSessionScore(
         entry: WorkoutEntry,
@@ -170,11 +287,14 @@ object WorkoutScoreCalculator {
             return SessionScore(0, 0.0, ProgressMetricType.VOLUME, 0.0, 0.0, empty)
         }
 
+        if (goal == TrainingGoal.HYPERTROPHY) {
+            return calcHypertrophySessionScore(entry, reps, history, exerciseType)
+        }
+
         val (metric, metricType) = calcMetric(entry, goal)
         val repQuality = calcRepQuality(reps, goal)
         val fatiguePenalty = calcFatiguePenalty(reps)
 
-        // Личный рекорд = max(метрика в истории БЕЗ текущей); при первой сессии = metric
         val historyExcludingCurrent = history.filter { it.id != entry.id }
         val metricsHistory = historyExcludingCurrent.map { calcMetric(it, goal).first }
         val yourBest = metricsHistory.maxOrNull() ?: metric
@@ -200,7 +320,8 @@ object WorkoutScoreCalculator {
 
     /**
      * Сравнение текущей сессии с последними 3 (или 1–2 при малой истории).
-     * Прогресс в % считается по сырой метрике: (current - avg_last_3) / avg_last_3 × 100.
+     * Hypertrophy v2.5: дельта считается по composite score, применяется guardrail.
+     * Strength / Endurance: дельта по сырой метрике (legacy).
      */
     fun compare(
         current: WorkoutEntry,
@@ -212,11 +333,21 @@ object WorkoutScoreCalculator {
         val currentScore = calcSessionScore(current, history, goal, exerciseType)
         val curReps = parseReps(current)
         val curVolume = calcVolume(current)
-        val (currentMetric, metricType) = calcMetric(current, goal)
+        val isHypertrophy = goal == TrainingGoal.HYPERTROPHY
+
+        val currentMetric = if (isHypertrophy) currentScore.rawMetric else calcMetric(current, goal).first
+        val metricType = currentScore.metricType
 
         val goalName = goal.displayName
         val typeName = exerciseType.displayName
-        val targetStr = "${goal.targetRange.first}–${goal.targetRange.last}"
+        val targetStr = if (isHypertrophy) {
+            when (exerciseType) {
+                ExerciseType.COMPOUND -> "5–15"
+                ExerciseType.ISOLATION -> "8–20"
+            }
+        } else {
+            "${goal.targetRange.first}–${goal.targetRange.last}"
+        }
 
         if (previous == null) {
             val detail = ScoreDetail(
@@ -246,46 +377,100 @@ object WorkoutScoreCalculator {
             return ComparisonResult(ProgressStatus.FIRST, 0.0, "Первая тренировка", detail)
         }
 
-        // Последние 3 сессии БЕЗ текущей (предыдущие по времени)
         val trendEntries = history.drop(1).take(TREND_SIZE)
         if (trendEntries.isEmpty()) {
             val detail = buildDetail(current, previous, currentScore, null, 0.0, currentScore.score.toDouble(), goal, typeName, targetStr)
             return ComparisonResult(ProgressStatus.FIRST, 0.0, "Мало данных для сравнения", detail)
         }
 
-        val trendMetrics = trendEntries.map { calcMetric(it, goal).first }
+        val trendScores = trendEntries.map { calcSessionScore(it, history, goal, exerciseType) }
+        val trendMetrics = if (isHypertrophy) {
+            trendScores.map { it.rawMetric }
+        } else {
+            trendEntries.map { calcMetric(it, goal).first }
+        }
         val baselineMetric = trendMetrics.average()
-        val baselineScores = trendEntries.map { calcSessionScore(it, history, goal, exerciseType).score }
-        val baselineScore = baselineScores.average()
+        val baselineScore = trendScores.map { it.score }.average()
 
-        // Прогресс в % по сырой метрике
         val deltaPercent = if (baselineMetric > 0) {
             ((currentMetric - baselineMetric) / baselineMetric) * 100
         } else 0.0
 
-        val status = when {
+        var status = when {
             deltaPercent >= PROGRESS_THRESHOLD_PCT -> ProgressStatus.BETTER
             deltaPercent <= -PROGRESS_THRESHOLD_PCT -> ProgressStatus.WORSE
             else -> ProgressStatus.SAME
         }
 
         val reasons = mutableListOf<String>()
-        when (metricType) {
-            ProgressMetricType.VOLUME -> reasons += "Объём ${if (deltaPercent > 0) "↑" else "↓"}"
-            ProgressMetricType.E1RM -> reasons += "E1RM ${if (deltaPercent > 0) "↑" else "↓"}"
-            ProgressMetricType.TOTAL_REPS -> reasons += "Повторы ${if (deltaPercent > 0) "↑" else "↓"}"
+
+        if (isHypertrophy) {
+            val avgTension = trendScores.mapNotNull { it.components.tensionScore }
+                .let { if (it.isNotEmpty()) it.average() else null }
+            val avgProductive = trendScores.mapNotNull { it.components.productiveScore }
+                .let { if (it.isNotEmpty()) it.average() else null }
+            val avgQuality = trendScores.map { it.repQuality }.average()
+
+            val curTension = currentScore.components.tensionScore ?: 0.0
+            val curProductive = currentScore.components.productiveScore ?: 0.0
+
+            val tensionDelta = if (avgTension != null) curTension - avgTension else 0.0
+            val productiveDelta = if (avgProductive != null) curProductive - avgProductive else 0.0
+            val qualityDelta = currentScore.repQuality - avgQuality
+
+            val absTension = abs(tensionDelta)
+            val absProductive = abs(productiveDelta)
+            val absQuality = abs(qualityDelta)
+            val maxAbs = maxOf(absTension, absProductive, absQuality)
+
+            when {
+                maxAbs < 0.01 -> reasons += "Стимул ${if (deltaPercent >= 0) "↑" else "↓"}"
+                maxAbs == absTension -> reasons += "Напряжение ${if (tensionDelta > 0) "↑" else "↓"}"
+                maxAbs == absProductive -> reasons += "Продуктивные повторы ${if (productiveDelta > 0) "↑" else "↓"}"
+                else -> reasons += "Качество диапазона ${if (qualityDelta > 0) "↑" else "↓"}"
+            }
+
+            if (status == ProgressStatus.WORSE) {
+                val guardrailResult = applyHypertrophyGuardrail(current, curReps, exerciseType, trendEntries)
+                if (guardrailResult != null) {
+                    status = guardrailResult.first
+                    reasons += guardrailResult.second
+                }
+            }
+        } else {
+            when (metricType) {
+                ProgressMetricType.VOLUME -> reasons += "Объём ${if (deltaPercent > 0) "↑" else "↓"}"
+                ProgressMetricType.E1RM -> reasons += "E1RM ${if (deltaPercent > 0) "↑" else "↓"}"
+                ProgressMetricType.TOTAL_REPS -> reasons += "Повторы ${if (deltaPercent > 0) "↑" else "↓"}"
+                else -> {}
+            }
         }
+
         if (currentScore.repQuality < 0.5) reasons += "повторы вне $targetStr"
         if (currentScore.fatiguePenalty > 0.05) reasons += "Усталость ↑"
 
         val prevScore = calcSessionScore(previous, history, goal, exerciseType)
-        val baselineComponents = ScoreComponents(
-            metricValue = baselineMetric,
-            metricLabel = metricType.displayName,
-            repQuality = trendEntries.map { calcRepQuality(parseReps(it), goal) }.average(),
-            fatiguePenalty = trendEntries.map { calcFatiguePenalty(parseReps(it)) }.average(),
-            totalScore = baselineScore.toInt()
-        )
+        val baselineComponents = if (isHypertrophy) {
+            ScoreComponents(
+                metricValue = baselineMetric,
+                metricLabel = metricType.displayName,
+                repQuality = trendScores.map { it.repQuality }.average(),
+                fatiguePenalty = trendScores.map { it.fatiguePenalty }.average(),
+                totalScore = baselineScore.toInt(),
+                tensionScore = trendScores.mapNotNull { it.components.tensionScore }
+                    .let { if (it.isNotEmpty()) it.average() else null },
+                productiveScore = trendScores.mapNotNull { it.components.productiveScore }
+                    .let { if (it.isNotEmpty()) it.average() else null }
+            )
+        } else {
+            ScoreComponents(
+                metricValue = baselineMetric,
+                metricLabel = metricType.displayName,
+                repQuality = trendEntries.map { calcRepQuality(parseReps(it), goal) }.average(),
+                fatiguePenalty = trendEntries.map { calcFatiguePenalty(parseReps(it)) }.average(),
+                totalScore = baselineScore.toInt()
+            )
+        }
 
         val detail = buildDetail(current, previous, currentScore, prevScore, baselineMetric, baselineScore, goal, typeName, targetStr)
             .copy(baselineComponents = baselineComponents)
