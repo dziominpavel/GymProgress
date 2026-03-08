@@ -1,0 +1,34 @@
+---
+description: Контекст проекта GymProgress для агента
+alwaysApply: true
+---
+
+# GymProgress — контекст проекта
+
+## Что это
+Android-приложение на **Kotlin** для учёта силовых тренировок: журнал записей, справочник упражнений, статистика прогресса, встроенный «Тренер» с рекомендациями и опциональные советы через OpenRouter API.
+
+## Стек
+- **UI:** Jetpack Compose, Material 3, Adaptive Navigation Suite (NavigationSuiteScaffold)
+- **Данные:** Room (KSP), DataStore Preferences
+- **Архитектура:** один модуль `:app`, один `WorkoutViewModel`, ручная навигация (без Navigation Component) — состояние экранов в `GymProgressApp` через `rememberSaveable` и флаги
+
+## Ключевые пути
+- Точка входа: `MainActivity` → `GymProgressApp(viewModel)`
+- Экраны: `app/src/main/java/com/example/gymprogress/ui/screens/*.kt`
+- Тема и компоненты: `ui/theme/`, `ui/components/` (GymCard, MuscleGroupIcon и т.д.)
+- Данные: `data/` — Room (AppDatabase, WorkoutDao, ExerciseDao), SettingsRepository, TrainerRecommendationEngine, WorkoutScoreCalculator, AiService
+- Версия: `version.properties`; при assemble/install/bundle автоматически увеличивается patch
+
+## Документация (обязательно учитывать)
+- `docs/DESIGN_SYSTEM.md` — дизайн-система: цвета (оранжевый акцент), типографика (Roboto), отступы (4dp grid), компоненты (GymCard, GymSectionHeader, empty/loading/error states)
+- `docs/TRAINING_PROGRESS_ALGORITHM_PLAN.md` — алгоритм скоринга тренировок (объём, интенсивность, качество повторений, fatigue penalty)
+- `docs/POTENTIAL_ERRORS_ANALYSIS.md` — известные риски: сортировка дат как строк, destructive migration, связь записей с упражнениями, дубликаты имён, обработка ошибок в ViewModel
+
+## Секреты
+- `OPENROUTER_API_KEY` — из `local.properties`, попадает в `BuildConfig`; для AI-советов в Тренере.
+
+## При изменениях
+- Room: при смене схемы добавлять миграцию в `AppDatabase`, не полагаться на destructive migration в release.
+- UI: использовать токены из `GymTheme`, `Spacing`, `Dimens` и компоненты из дизайн-системы.
+- Новые экраны: получать данные и колбэки от `WorkoutViewModel`, не дублировать бизнес-логику в Composable.

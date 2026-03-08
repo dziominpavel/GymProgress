@@ -1,0 +1,30 @@
+---
+description: Jetpack Compose и дизайн-система GymProgress
+globs: app/**/ui/**/*.kt
+alwaysApply: false
+---
+
+# Compose и UI
+
+## Дизайн-система
+Следовать `docs/DESIGN_SYSTEM.md`: цветовая палитра (оранжевый акцент, тёмная/светлая темы), типографика (Roboto), отступы кратны 4dp, формы компонентов (Card 16dp, Button 12dp и т.д.).
+
+## Тема и токены
+- Использовать `GymTheme.colors` (accent, success, warning, divider, textDisabled, muscleHighlight), `MaterialTheme` для типографики и форм.
+- Отступы — из `Spacing`/`Dimens` (xs, sm, md, lg, screen padding 16dp). Не хардкодить магические числа для отступов.
+
+## Компоненты
+- Кнопки: `GymPrimaryButton`, `GymOutlinedButton`, `GymTextButton`.
+- Карточки: `GymCard`, `GymElevatedCard`.
+- Заголовки секций: `GymSectionHeader(title, subtitle)`.
+- Состояния: `GymEmptyState`, `GymLoadingState`, `GymSkeletonList`, `GymErrorState`.
+- Иконки мышечных групп: `MuscleGroupIcon` (Small/Default/Large).
+
+## Навигация
+- Навигация через `NavigationSuiteScaffold` (табы: Журнал, Прогресс, Упражнения + меню «Ещё»). Полноэкранные экраны (Настройки, Тренер, Активная тренировка и т.д.) — флаги в `GymProgressApp`, переключение по колбэкам и `BackHandler`.
+
+## Иконки
+- Material Icons: Outlined по умолчанию, Filled для активных элементов. Размеры: iconXs 16dp, iconSm 20dp, iconMd 24dp. Цвет — onSurface/onSurfaceVariant или primary для акцента.
+
+## Правило 60-30-10
+Около 60% нейтральные поверхности, 30% вторичные тона, 10% акцентный оранжевый. Не перегружать экран акцентом.

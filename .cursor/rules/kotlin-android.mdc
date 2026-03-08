@@ -1,0 +1,25 @@
+---
+description: Стандарты Kotlin и Android в проекте
+globs: app/**/*.kt
+alwaysApply: false
+---
+
+# Kotlin и Android
+
+## Стиль
+- Kotlin-first: предпочитать `val`, data class, extension-функции, корутины.
+- Зависимости и версии — из `gradle/libs.versions.toml`; не дублировать версии в `build.gradle.kts`.
+
+## ViewModel и состояние
+- Один общий `WorkoutViewModel`: StateFlow для данных (entries, exercises, settings, recommendation), методы для добавления/обновления/удаления запускаются в `viewModelScope.launch`.
+- UI подписывается через `collectAsState()`; навигация и модальные окна — состояние в `GymProgressApp`, не в ViewModel.
+
+## Обработка ошибок
+- Операции БД в ViewModel оборачивать в `runCatching` или try/catch; при ошибке выставлять состояние для UI (Snackbar/Toast) и логировать. Не глотать исключения пустым `catch`.
+- При добавлении ограничений в Room (UNIQUE, FK) предусмотреть обработку `SQLiteConstraintException` и понятное сообщение пользователю.
+
+## Даты
+- В БД предпочтительно хранить дату в числовом виде (epoch millis или через TypeConverter), не строкой `dd.MM.yyyy` — иначе сортировка `ORDER BY date` может быть некорректной. Форматирование — только на уровне UI.
+
+## Тесты
+- Unit-тесты в `app/src/test/`, инструментальные — в `app/src/androidTest/`. При добавлении логики (WorkoutScoreCalculator, TrainerRecommendationEngine, DAO) добавлять тесты.

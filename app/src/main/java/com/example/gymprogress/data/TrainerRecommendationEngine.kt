@@ -2,7 +2,6 @@ package com.example.gymprogress.data
 
 import kotlin.math.roundToLong
 import java.time.LocalDate
-import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 
 class TrainerRecommendationEngine {
@@ -88,7 +87,7 @@ class TrainerRecommendationEngine {
 
         val lastDate = history.maxOfOrNull { parseDate(it.date) } ?: return 0
         val lastExerciseNames = history
-            .filter { it.date == lastDate.format(DATE_FORMATTER) }
+            .filter { it.date == FormatUtils.toStorageDate(lastDate) }
             .map { it.exerciseName }
             .toSet()
 
@@ -569,18 +568,10 @@ class TrainerRecommendationEngine {
     }
 
     private fun parseDate(dateString: String): LocalDate {
-        return try {
-            LocalDate.parse(dateString, DATE_FORMATTER)
-        } catch (e: Exception) {
-            LocalDate.now()
-        }
+        return FormatUtils.parseStorageDate(dateString) ?: LocalDate.now()
     }
 
     private fun Double.roundToNearest(step: Double): Double {
         return (this / step).roundToLong() * step
-    }
-
-    companion object {
-        private val DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd")
     }
 }

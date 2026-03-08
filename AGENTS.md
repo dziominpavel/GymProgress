@@ -1,0 +1,19 @@
+# Руководство для агента (Cursor)
+
+Этот файл задаёт общие указания для AI-агента при работе с репозиторием GymProgress.
+
+## Перед изменениями
+1. **Прочитай контекст:** правила в `.cursor/rules/` подхватываются автоматически; при работе с UI сверяйся с `docs/DESIGN_SYSTEM.md`, с данными — с `docs/TRAINING_PROGRESS_ALGORITHM_PLAN.md` и `docs/POTENTIAL_ERRORS_ANALYSIS.md`.
+2. **Версии и сборка:** зависимости из `gradle/libs.versions.toml`; версия приложения в `version.properties`; при assemble/install/bundle patch увеличивается автоматически.
+3. **Секреты:** API-ключ OpenRouter задаётся в `local.properties` как `OPENROUTER_API_KEY` и доступен в коде через `BuildConfig.OPENROUTER_API_KEY`.
+
+## Приоритеты при доработках
+- Не ломать существующую навигацию и единственный ViewModel: экраны получают данные и колбэки из `WorkoutViewModel`.
+- При изменении схемы Room — добавлять миграцию, не использовать destructive migration в release.
+- Новый UI — только через компоненты и токены дизайн-системы (GymTheme, Spacing, Dimens, GymCard и т.д.).
+- Ошибки БД и сети обрабатывать и показывать пользователю (Snackbar/Toast), не глотать исключения.
+
+## Структура ответов
+- Код на Kotlin в стиле проекта: корутины, StateFlow, Compose.
+- Комментарии и сообщения пользователю на русском, код и имена — на английском.
+- При предложении рефакторинга учитывать документ `docs/POTENTIAL_ERRORS_ANALYSIS.md` (даты, миграции, целостность данных, дубликаты, обработка ошибок).

@@ -1,0 +1,25 @@
+---
+description: Слой данных — Room, DataStore, алгоритмы
+globs: app/**/data/**/*.kt
+alwaysApply: false
+---
+
+# Слой данных
+
+## Room
+- Сущности в `data/`: `WorkoutEntry`, `Exercise`. DAO — `WorkoutDao`, `ExerciseDao`; база — `AppDatabase` (version в миграциях).
+- При изменении схемы: добавить миграцию `Migration(N, N+1)` в `AppDatabase`. В release не использовать `fallbackToDestructiveMigration()` — только для debug при необходимости.
+- Индексы и ограничения: при добавлении UNIQUE на имя упражнения или FK (exerciseId в записях) описать в миграции и обработать конфликты в ViewModel.
+
+## Связь записей и упражнений
+- Сейчас записи хранят `exerciseName: String`. Рекомендуемая эволюция: `exerciseId` + ForeignKey с явной политикой при удалении (CASCADE или мягкая деактивация). Учитывать `docs/POTENTIAL_ERRORS_ANALYSIS.md`.
+
+## SettingsRepository
+- DataStore Preferences для цели тренировки, веса тела, настроек Тренера (тип сплита, дни, приоритет групп, разминка, делоад, тип прогрессии). Чтение — Flow, запись — suspend-функции.
+
+## Алгоритмы
+- `WorkoutScoreCalculator`: по `docs/TRAINING_PROGRESS_ALGORITHM_PLAN.md` — объём, интенсивность, качество повторений, fatigue penalty; коэффициенты по цели и типу упражнения (compound/isolation).
+- `TrainerRecommendationEngine`: вход — настройки, цель, упражнения, история; выход — `WorkoutRecommendation` (день, группы мышц, список упражнений с подходами/весами/повторениями).
+
+## AiService
+- Запросы к OpenRouter; API-ключ из `BuildConfig.OPENROUTER_API_KEY`. Обрабатывать ошибки сети и лимиты, не падать при отсутствии ключа.

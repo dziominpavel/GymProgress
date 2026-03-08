@@ -67,7 +67,6 @@ import com.example.gymprogress.ui.theme.Volt
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
-import java.time.format.DateTimeFormatter
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -80,10 +79,8 @@ fun AddEntryDialog(
     onConfirm: (date: String, exerciseName: String, weight: Double, reps: String) -> Unit
 ) {
     val today = LocalDate.now()
-    val displayFormatter = DateTimeFormatter.ofPattern("dd.MM.yyyy")
-    val storageFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
-    var displayDate by remember { mutableStateOf(today.format(displayFormatter)) }
-    var storageDate by remember { mutableStateOf(today.format(storageFormatter)) }
+    var displayDate by remember { mutableStateOf(FormatUtils.formatDate(FormatUtils.toStorageDate(today))) }
+    var storageDate by remember { mutableStateOf(FormatUtils.toStorageDate(today)) }
     var showDatePicker by remember { mutableStateOf(false) }
 
     var selectedExercise by remember { mutableStateOf<Exercise?>(null) }
@@ -489,8 +486,8 @@ fun AddEntryDialog(
                         val selected = Instant.ofEpochMilli(millis)
                             .atZone(ZoneId.systemDefault())
                             .toLocalDate()
-                        displayDate = selected.format(displayFormatter)
-                        storageDate = selected.format(storageFormatter)
+                        storageDate = FormatUtils.toStorageDate(selected)
+                        displayDate = FormatUtils.formatDate(storageDate)
                     }
                     showDatePicker = false
                 }) {
