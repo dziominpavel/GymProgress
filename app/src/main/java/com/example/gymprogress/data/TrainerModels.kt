@@ -40,3 +40,10 @@ data class WorkoutRecommendation(
     val isDeloadWeek: Boolean = false,
     val missingGroups: List<MuscleGroup> = emptyList()
 )
+
+/** Результат поиска прошлой сессии по сплиту для отображения в журнале. */
+data class PreviousSessionInSplit(
+    val entries: List<WorkoutEntry>,
+    val date: String,
+    val dayLabel: String
+)

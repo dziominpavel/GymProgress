@@ -17,6 +17,7 @@ import com.example.gymprogress.data.TrainerSettings
 import com.example.gymprogress.data.TrainingGoal
 import com.example.gymprogress.data.WorkoutEntry
 import com.example.gymprogress.data.WorkoutRecommendation
+import com.example.gymprogress.data.PreviousSessionInSplit
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -83,13 +84,81 @@ class WorkoutViewModel(application: Application) : AndroidViewModel(application)
         else trainerEngine.generateRecommendation(settings, goal, exercises, history)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
-    val previousSameDaySession: StateFlow<List<WorkoutEntry>> = allEntries.map { entries ->
-        findPreviousSession(entries, LocalDate.now())?.first ?: emptyList()
+    private val _journalSelectedDayIndex = MutableStateFlow<Int?>(null)
+    val journalSelectedDayIndex: StateFlow<Int?> = _journalSelectedDayIndex.asStateFlow()
+
+    val journalSplitDayOptions: StateFlow<List<Pair<Int, String>>> = trainerSettings
+        .map { trainerEngine.getSplitDayOptions(it) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    private val journalSessionState: StateFlow<Triple<List<WorkoutEntry>, String?, String?>> = combine(
+        allEntries,
+        trainerSettings,
+        allExercises,
+        _journalSelectedDayIndex
+    ) { entries, settings, exercises, selectedDay ->
+        val result = when {
+            selectedDay != null -> trainerEngine.findSessionForDayIndex(settings, entries, exercises, selectedDay)
+            else -> trainerEngine.findNextDaySessionInSplit(settings, entries, exercises)
+        }
+        when (val session = result) {
+            null -> {
+                if (selectedDay != null) {
+                    val options = trainerEngine.getSplitDayOptions(settings)
+                    val dayLabel = options.find { it.first == selectedDay }?.second ?: ""
+                    Triple(emptyList(), null, "Прошлая тренировка в сплите: $dayLabel · нет записей")
+                } else {
+                    val fallback = findPreviousSession(entries, LocalDate.now())
+                    Triple(
+                        fallback?.first ?: emptyList(),
+                        fallback?.second,
+                        null
+                    )
+                }
+            }
+            else -> Triple(
+                session.entries,
+                session.date,
+                "Прошлая тренировка в сплите: ${session.dayLabel} · ${FormatUtils.formatDate(session.date)}"
+            )
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), Triple(emptyList(), null, null))
+
+    val previousSessionForJournal: StateFlow<List<WorkoutEntry>> = journalSessionState
+        .map { it.first }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val previousSessionDateForJournal: StateFlow<String?> = journalSessionState
+        .map { it.second }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    val previousSessionTitleOverride: StateFlow<String?> = journalSessionState
+        .map { it.third }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    fun setJournalPreviousDay(dayIndex: Int?) {
+        _journalSelectedDayIndex.value = dayIndex
+    }
+
+    val previousSessionDayMuscleGroups: StateFlow<List<String>> = combine(
+        trainerSettings,
+        allEntries,
+        allExercises,
+        _journalSelectedDayIndex
+    ) { settings, entries, exercises, selectedDay ->
+        val displayedDayIndex = when {
+            selectedDay != null -> selectedDay
+            else -> if (trainerEngine.findNextDaySessionInSplit(settings, entries, exercises) != null)
+                trainerEngine.getNextDayIndex(settings, entries, exercises)
+            else null
+        }
+        displayedDayIndex?.let { dayIndex ->
+            trainerEngine.getMuscleGroupsForDayPublic(settings, dayIndex).map { it.displayName }
+        } ?: emptyList()
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    val previousSameDaySessionDate: StateFlow<String?> = allEntries.map { entries ->
-        findPreviousSession(entries, LocalDate.now())?.second
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+    val previousSameDaySession: StateFlow<List<WorkoutEntry>> = previousSessionForJournal
+    val previousSameDaySessionDate: StateFlow<String?> = previousSessionDateForJournal
 
     private fun findPreviousSession(
         entries: List<WorkoutEntry>,

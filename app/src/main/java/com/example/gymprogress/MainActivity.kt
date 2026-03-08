@@ -77,8 +77,12 @@ fun GymProgressApp(viewModel: WorkoutViewModel = viewModel()) {
         val today = FormatUtils.toStorageDate(LocalDate.now())
         entries.filter { it.date == today }
     }
-    val previousSameDaySession by viewModel.previousSameDaySession.collectAsState()
-    val previousSameDaySessionDate by viewModel.previousSameDaySessionDate.collectAsState()
+    val previousSessionForJournal by viewModel.previousSessionForJournal.collectAsState()
+    val previousSessionDateForJournal by viewModel.previousSessionDateForJournal.collectAsState()
+    val previousSessionTitleOverride by viewModel.previousSessionTitleOverride.collectAsState()
+    val journalSplitDayOptions by viewModel.journalSplitDayOptions.collectAsState()
+    val journalSelectedDayIndex by viewModel.journalSelectedDayIndex.collectAsState()
+    val previousSessionDayMuscleGroups by viewModel.previousSessionDayMuscleGroups.collectAsState()
     val selectedExercise by viewModel.selectedExercise.collectAsState()
     val entriesForExercise by viewModel.entriesForSelectedExercise.collectAsState()
     val allExercises by viewModel.allExercises.collectAsState()
@@ -229,8 +233,13 @@ fun GymProgressApp(viewModel: WorkoutViewModel = viewModel()) {
                     entries = todayEntries,
                     exercises = allExercises,
                     bodyWeightKg = bodyWeightKg,
-                    previousSession = previousSameDaySession,
-                    previousSessionDate = previousSameDaySessionDate,
+                    previousSession = previousSessionForJournal,
+                    previousSessionDate = previousSessionDateForJournal,
+                    previousSessionTitleOverride = previousSessionTitleOverride,
+                    previousSessionDayMuscleGroups = previousSessionDayMuscleGroups,
+                    splitDayOptions = journalSplitDayOptions,
+                    selectedDayIndex = journalSelectedDayIndex,
+                    onSelectDay = { viewModel.setJournalPreviousDay(it) },
                     workoutRecommendation = workoutRecommendation,
                     onAddClick = { showAddDialog = true },
                     onQuickAdd = { exerciseName ->

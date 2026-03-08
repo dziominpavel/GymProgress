@@ -66,6 +66,96 @@ class TrainerRecommendationEngine {
         }
     }
 
+    /**
+     * Находит последнюю по дате сессию, соответствующую указанному дню сплита.
+     * Используется для авто-режима (предыдущий день) и ручного выбора дня в журнале.
+     */
+    fun findSessionForDayIndex(
+        settings: TrainerSettings,
+        history: List<WorkoutEntry>,
+        exercises: List<Exercise>,
+        dayIndex: Int
+    ): PreviousSessionInSplit? {
+        if (history.isEmpty()) return null
+        val totalDays = getTotalDays(settings)
+        if (dayIndex !in 0 until totalDays) return null
+
+        val byDate = history.groupBy { it.date }
+        val sortedDates = byDate.keys
+            .mapNotNull { d -> FormatUtils.parseStorageDate(d)?.let { d to it } }
+            .sortedByDescending { it.second }
+            .map { it.first }
+
+        for (date in sortedDates) {
+            val sessionEntries = byDate[date] ?: continue
+            val exerciseNames = sessionEntries.map { it.exerciseName }.toSet()
+            val sessionDayIndex = guessDayIndexFromExercises(settings, exerciseNames, exercises)
+            if (sessionDayIndex == dayIndex) {
+                val dayLabel = getDayLabel(settings, dayIndex)
+                return PreviousSessionInSplit(
+                    entries = sessionEntries.sortedBy { it.id },
+                    date = date,
+                    dayLabel = dayLabel
+                )
+            }
+        }
+        return null
+    }
+
+    /**
+     * Находит последнюю сессию **следующего** дня сплита (того, что будет на следующей тренировке).
+     * В журнале по умолчанию показываем именно её — чтобы видеть, что делали в прошлый раз в этот день.
+     */
+    fun findNextDaySessionInSplit(
+        settings: TrainerSettings,
+        history: List<WorkoutEntry>,
+        exercises: List<Exercise>
+    ): PreviousSessionInSplit? {
+        if (history.isEmpty()) return null
+        val totalDays = getTotalDays(settings)
+
+        val lastDate = history.maxOfOrNull { parseDate(it.date) } ?: return null
+        val lastStorageDate = FormatUtils.toStorageDate(lastDate)
+        val lastExerciseNames = history
+            .filter { it.date == lastStorageDate }
+            .map { it.exerciseName }
+            .toSet()
+        val lastDayIndex = guessDayIndexFromExercises(settings, lastExerciseNames, exercises)
+        val nextDayIndex = (lastDayIndex + 1) % totalDays
+
+        return findSessionForDayIndex(settings, history, exercises, nextDayIndex)
+    }
+
+    /** Возвращает группы мышц для дня сплита (для отображения в UI). */
+    fun getMuscleGroupsForDayPublic(settings: TrainerSettings, dayIndex: Int): List<MuscleGroup> {
+        return getMuscleGroupsForDay(settings, dayIndex)
+    }
+
+    /** Индекс следующего дня сплита (какой будет на следующей тренировке). */
+    fun getNextDayIndex(
+        settings: TrainerSettings,
+        history: List<WorkoutEntry>,
+        exercises: List<Exercise>
+    ): Int {
+        if (history.isEmpty()) return 0
+        val totalDays = getTotalDays(settings)
+        if (totalDays == 1) return 0
+        val lastDate = history.maxOfOrNull { parseDate(it.date) } ?: return 0
+        val lastStorageDate = FormatUtils.toStorageDate(lastDate)
+        val lastExerciseNames = history
+            .filter { it.date == lastStorageDate }
+            .map { it.exerciseName }
+            .toSet()
+        val lastDayIndex = guessDayIndexFromExercises(settings, lastExerciseNames, exercises)
+        return (lastDayIndex + 1) % totalDays
+    }
+
+    fun getSplitDayOptions(settings: TrainerSettings): List<Pair<Int, String>> {
+        val totalDays = getTotalDays(settings)
+        if (totalDays <= 1) return emptyList()
+        return (0 until totalDays).map { i -> i to getDayLabel(settings, i) }
+    }
+
     private fun getTotalDays(settings: TrainerSettings): Int {
         return when (settings.splitType) {
             SplitType.FULL_BODY -> 1

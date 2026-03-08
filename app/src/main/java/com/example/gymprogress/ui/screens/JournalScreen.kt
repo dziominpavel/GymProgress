@@ -36,6 +36,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -72,6 +74,11 @@ fun JournalScreen(
     bodyWeightKg: Double?,
     previousSession: List<WorkoutEntry>,
     previousSessionDate: String?,
+    previousSessionTitleOverride: String?,
+    previousSessionDayMuscleGroups: List<String>,
+    splitDayOptions: List<Pair<Int, String>>,
+    selectedDayIndex: Int?,
+    onSelectDay: (Int?) -> Unit,
     workoutRecommendation: WorkoutRecommendation?,
     onAddClick: () -> Unit,
     onQuickAdd: (exerciseName: String) -> Unit,
@@ -89,7 +96,8 @@ fun JournalScreen(
         today.format(formatter)
     }
 
-    val previousSessionDayLabel = remember(previousSessionDate) {
+    val previousSessionDayLabel = remember(previousSessionDate, previousSessionTitleOverride) {
+        if (previousSessionTitleOverride != null) return@remember previousSessionTitleOverride
         if (previousSessionDate == null) return@remember null
         val parsed = FormatUtils.parseStorageDate(previousSessionDate) ?: return@remember null
         val today = LocalDate.now()
@@ -110,7 +118,7 @@ fun JournalScreen(
             .sortedBy { it.id }
     }
 
-    val hasAnyContent = workoutRecommendation != null || previousExercises.isNotEmpty() || entries.isNotEmpty()
+    val hasAnyContent = workoutRecommendation != null || previousExercises.isNotEmpty() || entries.isNotEmpty() || previousSessionDayLabel != null
 
     val sortedTodayEntries = remember(entries) {
         entries.sortedWith(
@@ -205,32 +213,62 @@ fun JournalScreen(
                     modifier = Modifier.fillMaxSize(),
                     verticalArrangement = Arrangement.spacedBy(Spacing.xs)
                 ) {
-                    // Section 1: Trainer recommendation card
+                    // Section 1: Trainer card (recommendation; при выборе дня — данные выбранного дня)
                     if (workoutRecommendation != null) {
                         item(key = "trainer_card") {
                             TrainerRecommendationCard(
                                 recommendation = workoutRecommendation,
+                                displayedDayLabel = selectedDayIndex?.let { idx ->
+                                    splitDayOptions.find { it.first == idx }?.second
+                                },
+                                displayedDayMuscleGroups = previousSessionDayMuscleGroups,
+                                displayedExerciseCount = if (selectedDayIndex != null) previousSession.size else null,
                                 onOpenTrainer = onOpenTrainer
                             )
                         }
                     }
 
-                    // Section 2: Previous session
-                    if (previousExercises.isNotEmpty() && previousSessionDayLabel != null) {
+                    // Section 2: Previous session (by split or fallback)
+                    if (previousSessionDayLabel != null) {
                         stickyHeader(key = "prev_header") {
-                            SectionHeader(
-                                title = previousSessionDayLabel,
-                                count = previousExercises.size,
-                                modifier = Modifier.background(MaterialTheme.colorScheme.background)
-                            )
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(MaterialTheme.colorScheme.background)
+                            ) {
+                                if (splitDayOptions.isNotEmpty()) {
+                                    PreviousSessionDaySelector(
+                                        splitDayOptions = splitDayOptions,
+                                        selectedDayIndex = selectedDayIndex,
+                                        onSelectDay = onSelectDay
+                                    )
+                                    Spacer(modifier = Modifier.height(Spacing.xxs))
+                                }
+                                SectionHeader(
+                                    title = previousSessionDayLabel,
+                                    count = previousExercises.size,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                                if (previousSessionDayMuscleGroups.isNotEmpty()) {
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = previousSessionDayMuscleGroups.joinToString(" · "),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.padding(start = Spacing.md)
+                                    )
+                                }
+                            }
                         }
-                        items(previousExercises, key = { "prev_${it.exerciseName}" }) { entry ->
-                            val exercise = exercises.find { it.name == entry.exerciseName }
-                            PreviousSessionExerciseRow(
-                                entry = entry,
-                                exercise = exercise,
-                                onQuickAdd = onQuickAdd
-                            )
+                        if (previousExercises.isNotEmpty()) {
+                            items(previousExercises, key = { "prev_${it.exerciseName}" }) { entry ->
+                                val exercise = exercises.find { it.name == entry.exerciseName }
+                                PreviousSessionExerciseRow(
+                                    entry = entry,
+                                    exercise = exercise,
+                                    onQuickAdd = onQuickAdd
+                                )
+                            }
                         }
                     }
 
@@ -389,14 +427,22 @@ private fun SectionHeader(
 
 @Composable
 private fun TrainerRecommendationCard(
-    recommendation: WorkoutRecommendation,
+    recommendation: WorkoutRecommendation?,
+    displayedDayLabel: String?,
+    displayedDayMuscleGroups: List<String>,
+    displayedExerciseCount: Int?,
     onOpenTrainer: () -> Unit
 ) {
-    val muscleGroupsText = remember(recommendation.muscleGroups) {
-        recommendation.muscleGroups
-            .mapNotNull { group -> MuscleGroup.entries.find { it.name == group.name }?.displayName }
-            .joinToString(" · ")
+    val dayLabel = displayedDayLabel ?: recommendation?.dayLabel ?: ""
+    val muscleGroupsText = if (displayedDayMuscleGroups.isNotEmpty()) {
+        displayedDayMuscleGroups.joinToString(" · ")
+    } else {
+        recommendation?.muscleGroups
+            ?.mapNotNull { group -> MuscleGroup.entries.find { it.name == group.name }?.displayName }
+            ?.joinToString(" · ")
+            ?: ""
     }
+    val exerciseCount = displayedExerciseCount ?: recommendation?.exercises?.size ?: 0
 
     Card(
         modifier = Modifier
@@ -422,7 +468,7 @@ private fun TrainerRecommendationCard(
             Spacer(modifier = Modifier.width(Spacing.sm))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "Тренер · ${recommendation.dayLabel}",
+                    text = "Тренер · $dayLabel",
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.SemiBold,
                     color = Volt
@@ -438,11 +484,11 @@ private fun TrainerRecommendationCard(
                 }
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
-                    text = "${recommendation.exercises.size} упражнений",
+                    text = "$exerciseCount упражнений",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                if (recommendation.isDeloadWeek) {
+                if (recommendation?.isDeloadWeek == true) {
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
                         text = "Неделя разгрузки",
@@ -454,6 +500,41 @@ private fun TrainerRecommendationCard(
             TextButton(onClick = onOpenTrainer) {
                 Text("Подробнее", color = Volt)
             }
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun PreviousSessionDaySelector(
+    splitDayOptions: List<Pair<Int, String>>,
+    selectedDayIndex: Int?,
+    onSelectDay: (Int?) -> Unit
+) {
+    FlowRow(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
+        verticalArrangement = Arrangement.spacedBy(Spacing.xs)
+    ) {
+        FilterChip(
+            selected = selectedDayIndex == null,
+            onClick = { onSelectDay(null) },
+            label = { Text("Авто") },
+            colors = FilterChipDefaults.filterChipColors(
+                selectedContainerColor = Volt.copy(alpha = 0.2f),
+                selectedLabelColor = Volt
+            )
+        )
+        splitDayOptions.forEach { (dayIndex, label) ->
+            FilterChip(
+                selected = selectedDayIndex == dayIndex,
+                onClick = { onSelectDay(dayIndex) },
+                label = { Text(label) },
+                colors = FilterChipDefaults.filterChipColors(
+                    selectedContainerColor = Volt.copy(alpha = 0.2f),
+                    selectedLabelColor = Volt
+                )
+            )
         }
     }
 }
