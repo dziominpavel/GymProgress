@@ -18,43 +18,28 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.DateRange
-import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.DatePicker
-import androidx.compose.material3.DatePickerDialog
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -62,21 +47,22 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import com.example.gymprogress.data.Exercise
 import com.example.gymprogress.data.FormatUtils
+import com.example.gymprogress.data.MuscleGroup
 import com.example.gymprogress.data.WorkoutEntry
+import com.example.gymprogress.data.WorkoutRecommendation
+import com.example.gymprogress.ui.components.MuscleGroupIcon
 import com.example.gymprogress.ui.theme.CardShape
 import com.example.gymprogress.ui.theme.FabShape
 import com.example.gymprogress.ui.theme.Spacing
 import com.example.gymprogress.ui.theme.Volt
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
-import kotlinx.coroutines.launch
+import java.util.Locale
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
 @Composable
@@ -84,13 +70,55 @@ fun JournalScreen(
     entries: List<WorkoutEntry>,
     exercises: List<Exercise>,
     bodyWeightKg: Double?,
+    previousSession: List<WorkoutEntry>,
+    previousSessionDate: String?,
+    workoutRecommendation: WorkoutRecommendation?,
     onAddClick: () -> Unit,
+    onQuickAdd: (exerciseName: String) -> Unit,
+    onOpenTrainer: () -> Unit,
     onDeleteEntry: (WorkoutEntry) -> Unit,
     onUpdateEntry: (WorkoutEntry) -> Unit,
     modifier: Modifier = Modifier
 ) {
     var selectedEntry by remember { mutableStateOf<WorkoutEntry?>(null) }
     var entryToEdit by remember { mutableStateOf<WorkoutEntry?>(null) }
+
+    val todayLabel = remember {
+        val today = LocalDate.now()
+        val formatter = DateTimeFormatter.ofPattern("d MMMM", Locale.forLanguageTag("ru"))
+        today.format(formatter)
+    }
+
+    val previousSessionDayLabel = remember(previousSessionDate) {
+        if (previousSessionDate == null) return@remember null
+        val parsed = FormatUtils.parseStorageDate(previousSessionDate) ?: return@remember null
+        val today = LocalDate.now()
+        val formattedDate = FormatUtils.formatDate(previousSessionDate)
+        if (parsed.dayOfWeek == today.dayOfWeek) {
+            val dayName = parsed.format(DateTimeFormatter.ofPattern("EEEE", Locale.forLanguageTag("ru")))
+                .replaceFirstChar { it.uppercase() }
+            "Прошлый $dayName · $formattedDate"
+        } else {
+            "Прошлая тренировка · $formattedDate"
+        }
+    }
+
+    val previousExercises = remember(previousSession) {
+        previousSession
+            .groupBy { it.exerciseName }
+            .map { (_, list) -> list.maxByOrNull { it.id } ?: list.first() }
+            .sortedBy { it.id }
+    }
+
+    val hasAnyContent = workoutRecommendation != null || previousExercises.isNotEmpty() || entries.isNotEmpty()
+
+    val sortedTodayEntries = remember(entries) {
+        entries.sortedWith(
+            compareBy<WorkoutEntry> {
+                FormatUtils.parseStorageDate(it.date) ?: LocalDate.MIN
+            }.thenBy { it.id }
+        )
+    }
 
     Scaffold(
         modifier = modifier,
@@ -101,9 +129,7 @@ fun JournalScreen(
                 containerColor = Volt,
                 contentColor = MaterialTheme.colorScheme.onPrimary,
                 shape = FabShape,
-                elevation = FloatingActionButtonDefaults.elevation(
-                    defaultElevation = 6.dp
-                )
+                elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 6.dp)
             ) {
                 Icon(Icons.Default.Add, contentDescription = "Добавить запись")
             }
@@ -132,27 +158,14 @@ fun JournalScreen(
                     .background(Volt)
             )
             Spacer(modifier = Modifier.height(Spacing.xs))
-            val todayLabel = remember {
-                val today = LocalDate.now()
-                val formatter = DateTimeFormatter.ofPattern("d MMMM", java.util.Locale("ru"))
-                today.format(formatter)
-            }
-            if (entries.isEmpty()) {
-                Text(
-                    text = todayLabel,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            } else {
-                Text(
-                    text = "$todayLabel · ${entries.size} записей",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+            Text(
+                text = if (entries.isEmpty()) todayLabel else "$todayLabel · ${entries.size} записей",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
             Spacer(modifier = Modifier.height(Spacing.md))
 
-            if (entries.isEmpty()) {
+            if (!hasAnyContent) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
@@ -168,10 +181,7 @@ fun JournalScreen(
                                 .background(MaterialTheme.colorScheme.surfaceVariant),
                             contentAlignment = Alignment.Center
                         ) {
-                            Text(
-                                "📝",
-                                style = MaterialTheme.typography.displaySmall
-                            )
+                            Text("📝", style = MaterialTheme.typography.displaySmall)
                         }
                         Spacer(modifier = Modifier.height(Spacing.lg))
                         Text(
@@ -191,61 +201,70 @@ fun JournalScreen(
                     }
                 }
             } else {
-                val sortedEntries = remember(entries) {
-                    entries.sortedWith(
-                        compareByDescending<WorkoutEntry> { FormatUtils.parseStorageDate(it.date) ?: LocalDate.MIN }
-                            .thenBy { it.id }
-                    )
-                }
-
-                val grouped = sortedEntries.groupBy { it.date }
-
                 LazyColumn(
-                    modifier = Modifier
-                        .fillMaxSize(),
+                    modifier = Modifier.fillMaxSize(),
                     verticalArrangement = Arrangement.spacedBy(Spacing.xs)
                 ) {
-                    grouped.forEach { (date, dateEntries) ->
-                        stickyHeader {
+                    // Section 1: Trainer recommendation card
+                    if (workoutRecommendation != null) {
+                        item(key = "trainer_card") {
+                            TrainerRecommendationCard(
+                                recommendation = workoutRecommendation,
+                                onOpenTrainer = onOpenTrainer
+                            )
+                        }
+                    }
+
+                    // Section 2: Previous session
+                    if (previousExercises.isNotEmpty() && previousSessionDayLabel != null) {
+                        stickyHeader(key = "prev_header") {
+                            SectionHeader(
+                                title = previousSessionDayLabel,
+                                count = previousExercises.size,
+                                modifier = Modifier.background(MaterialTheme.colorScheme.background)
+                            )
+                        }
+                        items(previousExercises, key = { "prev_${it.exerciseName}" }) { entry ->
+                            val exercise = exercises.find { it.name == entry.exerciseName }
+                            PreviousSessionExerciseRow(
+                                entry = entry,
+                                exercise = exercise,
+                                onQuickAdd = onQuickAdd
+                            )
+                        }
+                    }
+
+                    // Section 3: Today
+                    stickyHeader(key = "today_header") {
+                        SectionHeader(
+                            title = "Сегодня",
+                            count = entries.size,
+                            modifier = Modifier.background(MaterialTheme.colorScheme.background)
+                        )
+                    }
+
+                    if (entries.isEmpty()) {
+                        item(key = "today_empty") {
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .background(MaterialTheme.colorScheme.background)
-                                    .padding(vertical = Spacing.xs)
+                                    .padding(vertical = Spacing.lg),
+                                contentAlignment = Alignment.Center
                             ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(4.dp, 24.dp)
-                                            .clip(RoundedCornerShape(2.dp))
-                                            .background(Volt)
-                                    )
-                                    Spacer(modifier = Modifier.width(Spacing.sm))
-                                    Text(
-                                        text = FormatUtils.formatDate(date),
-                                        style = MaterialTheme.typography.titleSmall,
-                                        fontWeight = FontWeight.Black,
-                                        color = Volt
-                                    )
-                                    Spacer(modifier = Modifier.width(Spacing.xs))
-                                    Box(
-                                        modifier = Modifier
-                                            .clip(RoundedCornerShape(Spacing.xxs))
-                                            .background(Volt.copy(alpha = 0.15f))
-                                            .padding(horizontal = Spacing.xs, vertical = 2.dp)
-                                    ) {
-                                        Text(
-                                            text = "${dateEntries.size}",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            fontWeight = FontWeight.Bold,
-                                            color = Volt
-                                        )
-                                    }
-                                }
+                                Text(
+                                    text = if (previousExercises.isNotEmpty())
+                                        "Нажмите «+» рядом с упражнением или добавьте новое"
+                                    else
+                                        "Нажмите + чтобы добавить первое упражнение",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign = TextAlign.Center,
+                                    modifier = Modifier.padding(horizontal = Spacing.lg)
+                                )
                             }
                         }
-
-                        items(dateEntries, key = { it.id }) { entry ->
+                    } else {
+                        items(sortedTodayEntries, key = { it.id }) { entry ->
                             WorkoutEntryCard(
                                 entry = entry,
                                 onLongClick = { selectedEntry = entry }
@@ -324,6 +343,186 @@ fun JournalScreen(
     }
 }
 
+@Composable
+private fun SectionHeader(
+    title: String,
+    count: Int,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(vertical = Spacing.xs),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(4.dp, 24.dp)
+                .clip(RoundedCornerShape(2.dp))
+                .background(Volt)
+        )
+        Spacer(modifier = Modifier.width(Spacing.sm))
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Black,
+            color = Volt
+        )
+        if (count > 0) {
+            Spacer(modifier = Modifier.width(Spacing.xs))
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(Spacing.xxs))
+                    .background(Volt.copy(alpha = 0.15f))
+                    .padding(horizontal = Spacing.xs, vertical = 2.dp)
+            ) {
+                Text(
+                    text = "$count",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = Volt
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun TrainerRecommendationCard(
+    recommendation: WorkoutRecommendation,
+    onOpenTrainer: () -> Unit
+) {
+    val muscleGroupsText = remember(recommendation.muscleGroups) {
+        recommendation.muscleGroups
+            .mapNotNull { group -> MuscleGroup.entries.find { it.name == group.name }?.displayName }
+            .joinToString(" · ")
+    }
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .animateContentSize(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        shape = CardShape
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = Spacing.md, vertical = Spacing.sm),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(4.dp, 56.dp)
+                    .clip(RoundedCornerShape(2.dp))
+                    .background(Volt)
+            )
+            Spacer(modifier = Modifier.width(Spacing.sm))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Тренер · ${recommendation.dayLabel}",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Volt
+                )
+                if (muscleGroupsText.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = muscleGroupsText,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = "${recommendation.exercises.size} упражнений",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                if (recommendation.isDeloadWeek) {
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = "Неделя разгрузки",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.tertiary
+                    )
+                }
+            }
+            TextButton(onClick = onOpenTrainer) {
+                Text("Подробнее", color = Volt)
+            }
+        }
+    }
+}
+
+@Composable
+private fun PreviousSessionExerciseRow(
+    entry: WorkoutEntry,
+    exercise: Exercise?,
+    onQuickAdd: (String) -> Unit
+) {
+    val setsCount = remember(entry.reps) {
+        entry.reps.split(",").filter { it.isNotBlank() }.size
+    }
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .animateContentSize(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        shape = CardShape
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = Spacing.sm, vertical = Spacing.xs),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            MuscleGroupIcon(
+                muscleGroup = exercise?.muscleGroup ?: "",
+                size = 40.dp,
+                backgroundColor = MaterialTheme.colorScheme.surfaceVariant
+            )
+            Spacer(modifier = Modifier.width(Spacing.sm))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = entry.exerciseName,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = "${FormatUtils.formatWeight(entry.weight)} кг · $setsCount подх.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            IconButton(onClick = { onQuickAdd(entry.exerciseName) }) {
+                Box(
+                    modifier = Modifier
+                        .size(32.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Volt.copy(alpha = 0.15f))
+                        .border(1.dp, Volt.copy(alpha = 0.4f), RoundedCornerShape(8.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Default.Add,
+                        contentDescription = "Добавить ${entry.exerciseName}",
+                        tint = Volt,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
 @OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
 @Composable
 internal fun WorkoutEntryCard(
@@ -351,7 +550,6 @@ internal fun WorkoutEntryCard(
                 .fillMaxWidth()
                 .height(IntrinsicSize.Min)
         ) {
-            // Left accent bar
             Box(
                 modifier = Modifier
                     .width(4.dp)
@@ -365,7 +563,6 @@ internal fun WorkoutEntryCard(
                     .padding(Spacing.md),
                 verticalAlignment = Alignment.Top
             ) {
-                // Weight badge
                 Box(
                     modifier = Modifier
                         .size(56.dp)
@@ -434,5 +631,4 @@ internal fun WorkoutEntryCard(
             }
         }
     }
-
 }

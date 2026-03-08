@@ -180,6 +180,14 @@ fun WorkoutHistoryScreen(
 
             Spacer(modifier = Modifier.height(Spacing.xs))
 
+            val grouped = remember(filteredEntries) {
+                filteredEntries
+                    .groupBy { it.date }
+                    .entries
+                    .sortedByDescending { (date, _) -> whParseDate(date) }
+                    .associate { it.key to it.value.sortedBy { e -> e.id } }
+            }
+
             if (filteredEntries.isEmpty()) {
                 Box(
                     modifier = Modifier
@@ -212,13 +220,6 @@ fun WorkoutHistoryScreen(
                     }
                 }
             } else {
-                val grouped = remember(filteredEntries) {
-                    filteredEntries
-                        .groupBy { it.date }
-                        .entries
-                        .sortedByDescending { (date, _) -> whParseDate(date) }
-                        .associate { it.key to it.value }
-                }
 
                 LazyColumn(
                     modifier = Modifier
@@ -354,7 +355,7 @@ private fun WorkoutCalendar(
                     Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "Предыдущий месяц")
                 }
                 val monthName = month.month
-                    .getDisplayName(TextStyle.FULL_STANDALONE, Locale("ru"))
+                    .getDisplayName(TextStyle.FULL_STANDALONE, Locale.forLanguageTag("ru"))
                     .replaceFirstChar { it.uppercase() }
                 Text(
                     text = "$monthName ${month.year}",

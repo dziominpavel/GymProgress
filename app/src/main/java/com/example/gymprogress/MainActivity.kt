@@ -66,15 +66,19 @@ fun GymProgressApp(viewModel: WorkoutViewModel = viewModel()) {
     var showAbout by rememberSaveable { mutableStateOf(false) }
     var showTrainer by rememberSaveable { mutableStateOf(false) }
     var showTrainerSettings by rememberSaveable { mutableStateOf(false) }
+    var openedSettingsFromTrainer by rememberSaveable { mutableStateOf(false) }
     var showActiveWorkout by rememberSaveable { mutableStateOf(false) }
     var showWorkoutHistory by rememberSaveable { mutableStateOf(false) }
     var activeWorkoutRec by remember { mutableStateOf<WorkoutRecommendation?>(null) }
+    var preselectedExerciseForAdd by rememberSaveable { mutableStateOf<String?>(null) }
 
     val entries by viewModel.allEntries.collectAsState()
     val todayEntries = remember(entries) {
         val today = FormatUtils.toStorageDate(LocalDate.now())
         entries.filter { it.date == today }
     }
+    val previousSameDaySession by viewModel.previousSameDaySession.collectAsState()
+    val previousSameDaySessionDate by viewModel.previousSameDaySessionDate.collectAsState()
     val selectedExercise by viewModel.selectedExercise.collectAsState()
     val entriesForExercise by viewModel.entriesForSelectedExercise.collectAsState()
     val allExercises by viewModel.allExercises.collectAsState()
@@ -144,14 +148,14 @@ fun GymProgressApp(viewModel: WorkoutViewModel = viewModel()) {
         BackHandler {
             viewModel.updateTrainerSettings(trainerSettings)
             showTrainerSettings = false
-            showTrainer = true
+            if (openedSettingsFromTrainer) showTrainer = true
         }
         TrainerSettingsScreen(
             settings = trainerSettings,
             onSettingsChanged = { viewModel.updateTrainerSettings(it) },
             onBack = {
                 showTrainerSettings = false
-                showTrainer = true
+                if (openedSettingsFromTrainer) showTrainer = true
             },
             modifier = Modifier.fillMaxSize()
         )
@@ -185,6 +189,7 @@ fun GymProgressApp(viewModel: WorkoutViewModel = viewModel()) {
             recommendation = workoutRecommendation,
             onBack = { showTrainer = false },
             onOpenSettings = {
+                openedSettingsFromTrainer = true
                 showTrainer = false
                 showTrainerSettings = true
             },
@@ -210,7 +215,10 @@ fun GymProgressApp(viewModel: WorkoutViewModel = viewModel()) {
             moreMenuExpanded = showMoreMenu,
             onMoreMenuDismiss = { showMoreMenu = false },
             onMoreMenuToggle = { showMoreMenu = !showMoreMenu },
-            onOpenTrainer = { showTrainer = true },
+            onOpenTrainerSettings = {
+                openedSettingsFromTrainer = false
+                showTrainerSettings = true
+            },
             onOpenHistory = { showWorkoutHistory = true },
             onOpenSettings = { showSettings = true },
             onOpenAbout = { showAbout = true },
@@ -221,7 +229,15 @@ fun GymProgressApp(viewModel: WorkoutViewModel = viewModel()) {
                     entries = todayEntries,
                     exercises = allExercises,
                     bodyWeightKg = bodyWeightKg,
+                    previousSession = previousSameDaySession,
+                    previousSessionDate = previousSameDaySessionDate,
+                    workoutRecommendation = workoutRecommendation,
                     onAddClick = { showAddDialog = true },
+                    onQuickAdd = { exerciseName ->
+                        preselectedExerciseForAdd = exerciseName
+                        showAddDialog = true
+                    },
+                    onOpenTrainer = { showTrainer = true },
                     onDeleteEntry = { viewModel.deleteEntry(it) },
                     onUpdateEntry = { viewModel.updateEntry(it) },
                     modifier = Modifier.fillMaxSize()
@@ -260,10 +276,15 @@ fun GymProgressApp(viewModel: WorkoutViewModel = viewModel()) {
             history = entries,
             trainingGoal = trainingGoal,
             bodyWeightKg = bodyWeightKg,
-            onDismiss = { showAddDialog = false },
+            preselectedExercise = preselectedExerciseForAdd,
+            onDismiss = {
+                showAddDialog = false
+                preselectedExerciseForAdd = null
+            },
             onConfirm = { date, name, weight, reps ->
                 viewModel.addEntry(date, name, weight, reps)
                 showAddDialog = false
+                preselectedExerciseForAdd = null
             }
         )
     }

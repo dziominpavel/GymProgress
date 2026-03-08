@@ -1,7 +1,11 @@
 package com.example.gymprogress.ui.screens
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -38,8 +42,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.focus.onFocusEvent
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -53,9 +59,10 @@ import com.example.gymprogress.ui.theme.Volt
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun EditEntryDialog(
     entry: WorkoutEntry,
@@ -90,6 +97,9 @@ fun EditEntryDialog(
     var bodyWeightError by remember { mutableStateOf(false) }
 
     val scrollState = rememberScrollState()
+    val coroutineScope = rememberCoroutineScope()
+    val weightBringIntoViewRequester = remember { BringIntoViewRequester() }
+    val setsBringIntoViewRequester = remember { BringIntoViewRequester() }
 
     LaunchedEffect(setReps.size) {
         launch { scrollState.animateScrollTo(scrollState.maxValue) }
@@ -163,7 +173,14 @@ fun EditEntryDialog(
                         isError = weightError || bodyWeightError,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .bringIntoViewRequester(weightBringIntoViewRequester)
+                            .onFocusEvent {
+                                if (it.isFocused) {
+                                    coroutineScope.launch { delay(300); weightBringIntoViewRequester.bringIntoView() }
+                                }
+                            }
                     )
                     bodyWeightHint?.let {
                         Spacer(modifier = Modifier.height(2.dp))
@@ -183,48 +200,63 @@ fun EditEntryDialog(
                         )
                     }
 
-                    Text(
-                        "Подходы",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold
-                    )
-
-                    setReps.forEachIndexed { index, repsValue ->
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.fillMaxWidth()
+                    Box(
+                        modifier = Modifier.bringIntoViewRequester(setsBringIntoViewRequester)
+                    ) {
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            OutlinedTextField(
-                                value = repsValue,
-                                onValueChange = { setReps[index] = it; repsError = false },
-                                label = { Text("Подход ${index + 1}") },
-                                singleLine = true,
-                                isError = repsError && repsValue.isBlank(),
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                shape = RoundedCornerShape(12.dp),
-                                modifier = Modifier.weight(1f)
+                            Text(
+                                "Подходы",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold
                             )
-                            if (setReps.size > 1) {
-                                IconButton(onClick = { setReps.removeAt(index) }) {
-                                    Icon(
-                                        Icons.Default.Delete,
-                                        contentDescription = "Удалить подход",
-                                        tint = MaterialTheme.colorScheme.error
+
+                            setReps.forEachIndexed { index, repsValue ->
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    OutlinedTextField(
+                                        value = repsValue,
+                                        onValueChange = { setReps[index] = it; repsError = false },
+                                        label = { Text("Подход ${index + 1}") },
+                                        singleLine = true,
+                                        isError = repsError && repsValue.isBlank(),
+                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                        shape = RoundedCornerShape(12.dp),
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .onFocusEvent {
+                                                if (it.isFocused) {
+                                                    coroutineScope.launch { delay(300); setsBringIntoViewRequester.bringIntoView() }
+                                                }
+                                            }
                                     )
+                                    if (setReps.size > 1) {
+                                        IconButton(onClick = { setReps.removeAt(index) }) {
+                                            Icon(
+                                                Icons.Default.Delete,
+                                                contentDescription = "Удалить подход",
+                                                tint = MaterialTheme.colorScheme.error
+                                            )
+                                        }
+                                    } else {
+                                        Spacer(modifier = Modifier.width(48.dp))
+                                    }
                                 }
-                            } else {
-                                Spacer(modifier = Modifier.width(48.dp))
+                            }
+
+                            TextButton(
+                                onClick = { setReps.add("") },
+                                modifier = Modifier.align(Alignment.CenterHorizontally)
+                            ) {
+                                Icon(Icons.Default.Add, contentDescription = null)
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Добавить подход")
                             }
                         }
-                    }
-
-                    TextButton(
-                        onClick = { setReps.add("") },
-                        modifier = Modifier.align(Alignment.CenterHorizontally)
-                    ) {
-                        Icon(Icons.Default.Add, contentDescription = null)
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Добавить подход")
                     }
                 }
 
@@ -236,26 +268,16 @@ fun EditEntryDialog(
                 ) {
                     TextButton(onClick = onDismiss) { Text("Отмена") }
                     TextButton(onClick = {
-                        val weightInput = weightText.replace(",", ".").toDoubleOrNull()
+                        val weightInput = parseWeightInput(weightText, isBodyweightExercise)
                         val isBodyWeightReady = !isBodyweightExercise || bodyWeightKg != null
-                        val isWeightValid = if (isBodyweightExercise) {
-                            weightInput != null && weightInput >= 0
-                        } else {
-                            weightInput != null && weightInput > 0
-                        }
-                        val allRepsValid = setReps.all {
-                            it.isNotBlank() && it.toIntOrNull() != null && it.toInt() > 0
-                        }
+                        val isWeightValid = isWeightInputValid(weightInput, isBodyweightExercise)
+                        val allRepsValid = setReps.all { isRepsValid(it) }
                         weightError = !isWeightValid
                         bodyWeightError = isBodyweightExercise && !isBodyWeightReady
                         repsError = !allRepsValid
 
                         if (isWeightValid && allRepsValid && isBodyWeightReady) {
-                            val finalWeight = if (isBodyweightExercise) {
-                                (bodyWeightKg ?: 0.0) + (weightInput ?: 0.0)
-                            } else {
-                                weightInput ?: 0.0
-                            }
+                            val finalWeight = calcFinalWeight(weightInput, isBodyweightExercise, bodyWeightKg)
                             onConfirm(
                                 entry.copy(
                                     date = storageDate,

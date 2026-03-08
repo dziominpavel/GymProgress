@@ -83,6 +83,34 @@ class WorkoutViewModel(application: Application) : AndroidViewModel(application)
         else trainerEngine.generateRecommendation(settings, goal, exercises, history)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
+    val previousSameDaySession: StateFlow<List<WorkoutEntry>> = allEntries.map { entries ->
+        findPreviousSession(entries, LocalDate.now())?.first ?: emptyList()
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val previousSameDaySessionDate: StateFlow<String?> = allEntries.map { entries ->
+        findPreviousSession(entries, LocalDate.now())?.second
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    private fun findPreviousSession(
+        entries: List<WorkoutEntry>,
+        today: LocalDate
+    ): Pair<List<WorkoutEntry>, String?>? {
+        val todayStorage = FormatUtils.toStorageDate(today)
+        val grouped = entries.filter { it.date != todayStorage }.groupBy { it.date }
+        if (grouped.isEmpty()) return null
+
+        val sameDay = grouped.entries
+            .filter { (d, _) -> FormatUtils.parseStorageDate(d)?.dayOfWeek == today.dayOfWeek }
+            .maxByOrNull { (d, _) -> FormatUtils.parseStorageDate(d) ?: LocalDate.MIN }
+
+        if (sameDay != null) return Pair(sameDay.value, sameDay.key)
+
+        val fallback = grouped.entries
+            .maxByOrNull { (d, _) -> FormatUtils.parseStorageDate(d) ?: LocalDate.MIN }
+
+        return fallback?.let { Pair(it.value, it.key) }
+    }
+
     private val _selectedExercise = MutableStateFlow<String?>(null)
     val selectedExercise: StateFlow<String?> = _selectedExercise.asStateFlow()
 

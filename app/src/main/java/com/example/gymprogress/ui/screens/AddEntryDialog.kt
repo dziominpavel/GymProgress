@@ -1,7 +1,11 @@
 package com.example.gymprogress.ui.screens
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -45,12 +49,15 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.focus.onFocusEvent
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -68,7 +75,7 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun AddEntryDialog(
     exercises: List<Exercise>,
@@ -76,14 +83,19 @@ fun AddEntryDialog(
     trainingGoal: TrainingGoal,
     bodyWeightKg: Double?,
     onDismiss: () -> Unit,
-    onConfirm: (date: String, exerciseName: String, weight: Double, reps: String) -> Unit
+    onConfirm: (date: String, exerciseName: String, weight: Double, reps: String) -> Unit,
+    preselectedExercise: String? = null
 ) {
     val today = LocalDate.now()
     var displayDate by remember { mutableStateOf(FormatUtils.formatDate(FormatUtils.toStorageDate(today))) }
     var storageDate by remember { mutableStateOf(FormatUtils.toStorageDate(today)) }
     var showDatePicker by remember { mutableStateOf(false) }
 
-    var selectedExercise by remember { mutableStateOf<Exercise?>(null) }
+    var selectedExercise by remember {
+        mutableStateOf(
+            preselectedExercise?.let { name -> exercises.find { it.name == name } }
+        )
+    }
     var exerciseDropdownExpanded by remember { mutableStateOf(false) }
     var expandedGroup by remember { mutableStateOf<String?>(null) }
 
@@ -119,9 +131,12 @@ fun AddEntryDialog(
             ?: emptyList()
     }
 
-    val grouped = exercises.groupBy { it.muscleGroup }
+    val grouped = remember(exercises) { exercises.groupBy { it.muscleGroup } }
 
     val scrollState = rememberScrollState()
+    val coroutineScope = rememberCoroutineScope()
+    val weightBringIntoViewRequester = remember { BringIntoViewRequester() }
+    val setsBringIntoViewRequester = remember { BringIntoViewRequester() }
 
     LaunchedEffect(setReps.size) {
         launch { scrollState.animateScrollTo(scrollState.maxValue) }
@@ -346,7 +361,14 @@ fun AddEntryDialog(
                         isError = weightError || bodyWeightError,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .bringIntoViewRequester(weightBringIntoViewRequester)
+                            .onFocusEvent {
+                                if (it.isFocused) {
+                                    coroutineScope.launch { delay(300); weightBringIntoViewRequester.bringIntoView() }
+                                }
+                            }
                     )
                     bodyWeightHint?.let {
                         Spacer(modifier = Modifier.height(2.dp))
@@ -376,51 +398,66 @@ fun AddEntryDialog(
 
                     // Sets
                     Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        "Подходы",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold
-                    )
-
-                    setReps.forEachIndexed { index, repsValue ->
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.fillMaxWidth()
+                    Box(
+                        modifier = Modifier.bringIntoViewRequester(setsBringIntoViewRequester)
+                    ) {
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            OutlinedTextField(
-                                value = repsValue,
-                                onValueChange = {
-                                    setReps[index] = it
-                                    repsError = false
-                                },
-                                label = { Text("Подход ${index + 1}") },
-                                singleLine = true,
-                                isError = repsError && repsValue.isBlank(),
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                shape = RoundedCornerShape(12.dp),
-                                modifier = Modifier.weight(1f)
+                            Text(
+                                "Подходы",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold
                             )
-                            if (setReps.size > 1) {
-                                IconButton(onClick = { setReps.removeAt(index) }) {
-                                    Icon(
-                                        Icons.Default.Delete,
-                                        contentDescription = "Удалить подход",
-                                        tint = MaterialTheme.colorScheme.error
+
+                            setReps.forEachIndexed { index, repsValue ->
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    OutlinedTextField(
+                                        value = repsValue,
+                                        onValueChange = {
+                                            setReps[index] = it
+                                            repsError = false
+                                        },
+                                        label = { Text("Подход ${index + 1}") },
+                                        singleLine = true,
+                                        isError = repsError && repsValue.isBlank(),
+                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                        shape = RoundedCornerShape(12.dp),
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .onFocusEvent {
+                                                if (it.isFocused) {
+                                                    coroutineScope.launch { delay(300); setsBringIntoViewRequester.bringIntoView() }
+                                                }
+                                            }
                                     )
+                                    if (setReps.size > 1) {
+                                        IconButton(onClick = { setReps.removeAt(index) }) {
+                                            Icon(
+                                                Icons.Default.Delete,
+                                                contentDescription = "Удалить подход",
+                                                tint = MaterialTheme.colorScheme.error
+                                            )
+                                        }
+                                    } else {
+                                        Spacer(modifier = Modifier.width(48.dp))
+                                    }
                                 }
-                            } else {
-                                Spacer(modifier = Modifier.width(48.dp))
+                            }
+
+                            TextButton(
+                                onClick = { setReps.add("") },
+                                modifier = Modifier.align(Alignment.CenterHorizontally)
+                            ) {
+                                Icon(Icons.Default.Add, contentDescription = null)
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Добавить подход")
                             }
                         }
-                    }
-
-                    TextButton(
-                        onClick = { setReps.add("") },
-                        modifier = Modifier.align(Alignment.CenterHorizontally)
-                    ) {
-                        Icon(Icons.Default.Add, contentDescription = null)
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Добавить подход")
                     }
                 }
 
@@ -434,17 +471,11 @@ fun AddEntryDialog(
                     }
                     TextButton(onClick = {
                         val isExerciseValid = selectedExercise != null
-                        val weightInput = weightText.replace(",", ".").toDoubleOrNull()
                         val isBodyweightExercise = selectedExercise?.isBodyweight == true
+                        val weightInput = parseWeightInput(weightText, isBodyweightExercise)
                         val isBodyWeightReady = !isBodyweightExercise || bodyWeightKg != null
-                        val isWeightValid = if (isBodyweightExercise) {
-                            weightInput != null && weightInput >= 0
-                        } else {
-                            weightInput != null && weightInput > 0
-                        }
-                        val allRepsValid = setReps.all {
-                            it.isNotBlank() && it.toIntOrNull() != null && it.toInt() > 0
-                        }
+                        val isWeightValid = isWeightInputValid(weightInput, isBodyweightExercise)
+                        val allRepsValid = setReps.all { isRepsValid(it) }
 
                         exerciseError = !isExerciseValid
                         weightError = !isWeightValid
@@ -452,11 +483,7 @@ fun AddEntryDialog(
                         repsError = !allRepsValid
 
                         if (isExerciseValid && isWeightValid && allRepsValid && isBodyWeightReady) {
-                            val finalWeight = if (isBodyweightExercise) {
-                                (bodyWeightKg ?: 0.0) + (weightInput ?: 0.0)
-                            } else {
-                                weightInput ?: 0.0
-                            }
+                            val finalWeight = calcFinalWeight(weightInput, isBodyweightExercise, bodyWeightKg)
                             onConfirm(
                                 storageDate,
                                 selectedExercise!!.name,

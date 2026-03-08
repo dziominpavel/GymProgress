@@ -22,7 +22,7 @@ fun AppNavigationScaffold(
     moreMenuExpanded: Boolean,
     onMoreMenuDismiss: () -> Unit,
     onMoreMenuToggle: () -> Unit,
-    onOpenTrainer: () -> Unit,
+    onOpenTrainerSettings: () -> Unit,
     onOpenHistory: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenAbout: () -> Unit,
@@ -63,10 +63,10 @@ fun AppNavigationScaffold(
                             onDismissRequest = onMoreMenuDismiss
                         ) {
                             DropdownMenuItem(
-                                text = { Text("Тренер") },
+                                text = { Text("Настройки тренера") },
                                 onClick = {
                                     onMoreMenuDismiss()
-                                    onOpenTrainer()
+                                    onOpenTrainerSettings()
                                 }
                             )
                             DropdownMenuItem(
