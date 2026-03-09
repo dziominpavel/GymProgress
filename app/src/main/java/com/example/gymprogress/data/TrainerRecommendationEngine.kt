@@ -136,16 +136,22 @@ class TrainerRecommendationEngine {
         if (history.isEmpty()) return null
         val totalDays = getTotalDays(settings)
 
-        val lastDate = history.maxOfOrNull { parseDate(it.date) } ?: return null
+        // В авто-режиме журнала ориентируемся на последнюю завершённую тренировку,
+        // игнорируя незавершённый сегодняшний день, чтобы сплит не «скакал»
+        // во время текущей сессии.
+        val rotationHistory = historyForRotation(history)
+        if (rotationHistory.isEmpty()) return null
+
+        val lastDate = rotationHistory.maxOfOrNull { parseDate(it.date) } ?: return null
         val lastStorageDate = FormatUtils.toStorageDate(lastDate)
-        val lastExerciseNames = history
+        val lastExerciseNames = rotationHistory
             .filter { it.date == lastStorageDate }
             .map { it.exerciseName }
             .toSet()
         val lastDayIndex = guessDayIndexFromExercises(settings, lastExerciseNames, exercises)
         val nextDayIndex = (lastDayIndex + 1) % totalDays
 
-        return findSessionForDayIndex(settings, history, exercises, nextDayIndex)
+        return findSessionForDayIndex(settings, rotationHistory, exercises, nextDayIndex)
     }
 
     /** Возвращает группы мышц для дня сплита (для отображения в UI). */
@@ -162,9 +168,14 @@ class TrainerRecommendationEngine {
         if (history.isEmpty()) return 0
         val totalDays = getTotalDays(settings)
         if (totalDays == 1) return 0
-        val lastDate = history.maxOfOrNull { parseDate(it.date) } ?: return 0
+
+        // Здесь тоже опираемся на последнюю завершённую тренировку.
+        val rotationHistory = historyForRotation(history)
+        if (rotationHistory.isEmpty()) return 0
+
+        val lastDate = rotationHistory.maxOfOrNull { parseDate(it.date) } ?: return 0
         val lastStorageDate = FormatUtils.toStorageDate(lastDate)
-        val lastExerciseNames = history
+        val lastExerciseNames = rotationHistory
             .filter { it.date == lastStorageDate }
             .map { it.exerciseName }
             .toSet()
@@ -197,8 +208,13 @@ class TrainerRecommendationEngine {
         val totalDays = getTotalDays(settings)
         if (totalDays == 1) return 0
 
-        val lastDate = history.maxOfOrNull { parseDate(it.date) } ?: return 0
-        val lastExerciseNames = history
+        // Для рекомендации тренера также считаем следующий день по последней
+        // завершённой тренировке, чтобы во время текущего дня сплит не смещался.
+        val rotationHistory = historyForRotation(history)
+        if (rotationHistory.isEmpty()) return 0
+
+        val lastDate = rotationHistory.maxOfOrNull { parseDate(it.date) } ?: return 0
+        val lastExerciseNames = rotationHistory
             .filter { it.date == FormatUtils.toStorageDate(lastDate) }
             .map { it.exerciseName }
             .toSet()
@@ -703,6 +719,19 @@ class TrainerRecommendationEngine {
 
     private fun parseDate(dateString: String): LocalDate {
         return FormatUtils.parseStorageDate(dateString) ?: LocalDate.now()
+    }
+
+    /**
+     * История, по которой считаем «последний завершённый день» для сплита.
+     * Если есть тренировки до сегодняшнего дня — используем только их
+     * (игнорируя текущий незавершённый день). Если в истории только сегодня —
+     * возвращаем все записи как есть.
+     */
+    private fun historyForRotation(history: List<WorkoutEntry>): List<WorkoutEntry> {
+        if (history.isEmpty()) return emptyList()
+        val today = LocalDate.now()
+        val past = history.filter { parseDate(it.date).isBefore(today) }
+        return if (past.isNotEmpty()) past else history
     }
 
     private fun Double.roundToNearest(step: Double): Double {
