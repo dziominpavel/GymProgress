@@ -101,8 +101,12 @@ class TrainerRecommendationEngine {
         if (history.isEmpty()) return null
         val totalDays = getTotalDays(settings)
         if (dayIndex !in 0 until totalDays) return null
+        // Для ручного выбора дня в журнале тоже ориентируемся только на завершённые
+        // сессии, игнорируя текущий незавершённый день (как и в авто-режиме).
+        val rotationHistory = historyForRotation(history)
+        if (rotationHistory.isEmpty()) return null
 
-        val byDate = history.groupBy { it.date }
+        val byDate = rotationHistory.groupBy { it.date }
         val sortedDates = byDate.keys
             .mapNotNull { d -> FormatUtils.parseStorageDate(d)?.let { d to it } }
             .sortedByDescending { it.second }
