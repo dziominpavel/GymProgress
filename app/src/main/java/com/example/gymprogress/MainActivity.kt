@@ -39,6 +39,8 @@ import com.example.gymprogress.ui.screens.TrainerScreen
 import com.example.gymprogress.ui.screens.TrainerSettingsScreen
 import com.example.gymprogress.ui.screens.WorkoutHistoryScreen
 import com.example.gymprogress.data.WorkoutRecommendation
+import com.example.gymprogress.data.ScoringEngine
+import com.example.gymprogress.data.ScoringSystem
 import com.example.gymprogress.ui.theme.GymProgressTheme
 import com.example.gymprogress.data.FormatUtils
 import com.example.gymprogress.viewmodel.WorkoutViewModel
@@ -88,6 +90,11 @@ fun GymProgressApp(viewModel: WorkoutViewModel = viewModel()) {
     val allExercises by viewModel.allExercises.collectAsState()
     val trainingGoal by viewModel.trainingGoal.collectAsState()
     val bodyWeightKg by viewModel.bodyWeightKg.collectAsState()
+    val scoringSystem by viewModel.scoringSystem.collectAsState()
+    val gender by viewModel.gender.collectAsState()
+    val heightCm by viewModel.heightCm.collectAsState()
+    val isAnthropometryComplete by viewModel.isAnthropometryComplete.collectAsState()
+    val scoringEngine by viewModel.scoringEngine.collectAsState()
     val selectedExerciseType by viewModel.selectedExerciseType.collectAsState()
     val trainerSettings by viewModel.trainerSettings.collectAsState()
     val workoutRecommendation by viewModel.workoutRecommendation.collectAsState()
@@ -131,8 +138,15 @@ fun GymProgressApp(viewModel: WorkoutViewModel = viewModel()) {
         SettingsScreen(
             currentGoal = trainingGoal,
             bodyWeightKg = bodyWeightKg,
+            currentScoringSystem = scoringSystem,
+            currentGender = gender,
+            currentHeightCm = heightCm,
+            isAnthropometryComplete = isAnthropometryComplete,
             onGoalChanged = { viewModel.setTrainingGoal(it) },
             onBodyWeightChanged = { viewModel.setBodyWeightKg(it) },
+            onScoringSystemChanged = { viewModel.setScoringSystem(it) },
+            onGenderChanged = { viewModel.setGender(it) },
+            onHeightCmChanged = { viewModel.setHeightCm(it) },
             onBack = { showSettings = false },
             modifier = Modifier.fillMaxSize()
         )
@@ -268,6 +282,10 @@ fun GymProgressApp(viewModel: WorkoutViewModel = viewModel()) {
                     onExerciseSelected = { viewModel.selectExercise(it) },
                     trainingGoal = trainingGoal,
                     exerciseType = selectedExerciseType,
+                    scoringEngine = scoringEngine,
+                    scoringSystem = scoringSystem,
+                    bodyWeightKg = bodyWeightKg,
+                    isAnthropometryComplete = isAnthropometryComplete,
                     modifier = Modifier.fillMaxSize()
                 )
             }

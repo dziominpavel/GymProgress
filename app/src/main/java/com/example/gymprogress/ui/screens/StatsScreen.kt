@@ -43,11 +43,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.example.gymprogress.data.ComparisonResult
 import com.example.gymprogress.data.Exercise
 import com.example.gymprogress.data.ExerciseType
 import com.example.gymprogress.data.FormatUtils
 import com.example.gymprogress.data.MuscleGroup
+import com.example.gymprogress.data.ScoringEngine
+import com.example.gymprogress.data.ScoringSystem
+import com.example.gymprogress.data.SimplifiedScoreCalculator
 import com.example.gymprogress.data.TrainingGoal
 import com.example.gymprogress.data.WorkoutEntry
 import com.example.gymprogress.data.WorkoutScoreCalculator
@@ -67,14 +69,25 @@ fun StatsScreen(
     onExerciseSelected: (String?) -> Unit,
     modifier: Modifier = Modifier,
     trainingGoal: TrainingGoal = TrainingGoal.HYPERTROPHY,
-    exerciseType: ExerciseType = ExerciseType.COMPOUND
+    exerciseType: ExerciseType = ExerciseType.COMPOUND,
+    scoringEngine: ScoringEngine = WorkoutScoreCalculator,
+    scoringSystem: ScoringSystem = ScoringSystem.SIMPLIFIED,
+    bodyWeightKg: Double? = null,
+    isAnthropometryComplete: Boolean = true
 ) {
     var showHelp by remember { mutableStateOf(false) }
     var statsGroupMode by remember { mutableStateOf(0) } // 0 = Упражнение, 1 = Тренировка, 2 = Дата
     var selectedMuscleGroup by remember { mutableStateOf<MuscleGroup?>(null) }
     var selectedDate by remember { mutableStateOf<LocalDate?>(null) }
     var displayedMonth by remember { mutableStateOf(YearMonth.now()) }
-    if (showHelp) ScoreFormulaHelpDialog(onDismiss = { showHelp = false })
+    val isSimplified = scoringSystem == ScoringSystem.SIMPLIFIED
+    val selectedEx = selectedExercise?.let { name -> exercises.find { it.name == name } }
+    val isBodyweightExercise = selectedEx?.isBodyweight ?: false
+
+    if (showHelp) {
+        if (isSimplified) SimplifiedHelpDialog(onDismiss = { showHelp = false })
+        else ScoreFormulaHelpDialog(onDismiss = { showHelp = false })
+    }
 
     Scaffold(
         modifier = modifier,
@@ -278,26 +291,60 @@ fun StatsScreen(
                 val comparisons = listOldestFirst.mapIndexed { index, entry ->
                     val previous = listOldestFirst.getOrNull(index - 1)
                     val historyFromHere = listOldestFirst.take(index + 1).reversed()
-                    entry to WorkoutScoreCalculator.compare(
-                        entry, previous, historyFromHere, trainingGoal, exerciseType
+                    entry to scoringEngine.compare(
+                        entry, previous, historyFromHere, trainingGoal, exerciseType,
+                        bodyWeightKg, isBodyweightExercise
                     )
+                }
+
+                val bestE1RM = if (isSimplified) {
+                    listOldestFirst.maxOfOrNull {
+                        SimplifiedScoreCalculator.calcE1RMForEntry(it, bodyWeightKg, isBodyweightExercise)
+                    } ?: 0.0
+                } else 0.0
+
+                if (isSimplified && !isAnthropometryComplete && isBodyweightExercise) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(MaterialTheme.colorScheme.errorContainer)
+                            .padding(Spacing.sm)
+                    ) {
+                        Text(
+                            "Укажите вес тела в настройках для корректной оценки упражнений с собственным весом",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(Spacing.sm))
                 }
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
                 ) {
-                    StatCard(
-                        emoji = "\uD83C\uDFC6",
-                        title = "Макс. вес",
-                        value = "${FormatUtils.formatWeight(maxWeight)} кг",
-                        isHighlight = true,
-                        modifier = Modifier.weight(1f)
-                    )
+                    if (isSimplified && bestE1RM > 0) {
+                        StatCard(
+                            emoji = "\uD83D\uDCAA",
+                            title = "Оценочный 1RM",
+                            value = "${FormatUtils.formatWeight(bestE1RM)} кг",
+                            isHighlight = true,
+                            modifier = Modifier.weight(1f)
+                        )
+                    } else {
+                        StatCard(
+                            emoji = "\uD83C\uDFC6",
+                            title = "Макс. вес",
+                            value = "${FormatUtils.formatWeight(maxWeight)} кг",
+                            isHighlight = true,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
                     StatCard(
                         emoji = "\uD83C\uDFAF",
-                        title = "Цель",
-                        value = trainingGoal.displayName,
+                        title = if (isSimplified) "Система" else "Цель",
+                        value = if (isSimplified) "1RM" else trainingGoal.displayName,
                         modifier = Modifier.weight(1f)
                     )
                 }
@@ -326,7 +373,8 @@ fun StatsScreen(
                             .padding(horizontal = Spacing.xs, vertical = 2.dp)
                     ) {
                         Text(
-                            text = "${exerciseType.displayName} · ${trainingGoal.targetRange.first}–${trainingGoal.targetRange.last} повт.",
+                            text = if (isSimplified) "1RM · Epley"
+                                   else "${exerciseType.displayName} · ${trainingGoal.targetRange.first}–${trainingGoal.targetRange.last} повт.",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -342,7 +390,8 @@ fun StatsScreen(
                         HistoryRow(
                             entry = entry,
                             maxWeight = maxWeight,
-                            comparison = comparison
+                            comparison = comparison,
+                            isSimplified = isSimplified
                         )
                     }
                     item { Spacer(modifier = Modifier.height(Spacing.md)) }
@@ -365,7 +414,10 @@ fun StatsScreen(
                 allEntries = allEntries,
                 selectedMuscleGroup = selectedMuscleGroup,
                 onMuscleGroupSelected = { selectedMuscleGroup = it },
-                trainingGoal = trainingGoal
+                trainingGoal = trainingGoal,
+                scoringEngine = scoringEngine,
+                bodyWeightKg = bodyWeightKg,
+                isSimplified = isSimplified
             )
         } else {
             // Режим «Дата»: один общий скролл — календарь, блок «Итого», затем список записей (сверху первые по дате/id)
@@ -377,13 +429,14 @@ fun StatsScreen(
                 if (storageDate == null) emptyList()
                 else allEntries.filter { it.date == storageDate }.sortedBy { it.id }
             }
-            val dateReport = remember(storageDate, allEntries, exercises, trainingGoal) {
+            val dateReport = remember(storageDate, allEntries, exercises, trainingGoal, scoringEngine) {
                 if (storageDate != null)
-                    WorkoutScoreCalculator.compareSessionByDate(
+                    scoringEngine.compareSessionByDate(
                         selectedDateStorage = storageDate,
                         allExercises = exercises,
                         allEntries = allEntries,
-                        goal = trainingGoal
+                        goal = trainingGoal,
+                        bodyWeightKg = bodyWeightKg
                     )
                 else null
             }
@@ -419,7 +472,7 @@ fun StatsScreen(
                         }
                     }
                     else -> {
-                        dateReport?.let { report -> item { WorkoutDayReportView(report, showOverallCard = false) } }
+                        dateReport?.let { report -> item { WorkoutDayReportView(report, showOverallCard = false, isSimplified = isSimplified) } }
                     }
                 }
                 item { Spacer(modifier = Modifier.height(Spacing.md)) }

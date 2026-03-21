@@ -89,7 +89,7 @@ data class ComparisonResult(
     val details: ScoreDetail? = null
 )
 
-object WorkoutScoreCalculator {
+object WorkoutScoreCalculator : ScoringEngine {
 
     private const val TREND_SIZE = 3
     private const val MAX_SCORE = 1000
@@ -98,6 +98,43 @@ object WorkoutScoreCalculator {
 
     fun parseReps(entry: WorkoutEntry): List<Int> =
         entry.reps.split(",").mapNotNull { it.trim().toIntOrNull() }
+
+    // ── ScoringEngine interface delegates (advanced ignores bodyWeight/isBodyweight) ──
+
+    override fun calcSessionScore(
+        entry: WorkoutEntry,
+        history: List<WorkoutEntry>,
+        goal: TrainingGoal,
+        exerciseType: ExerciseType,
+        bodyWeightKg: Double?,
+        isBodyweightExercise: Boolean
+    ): SessionScore = calcSessionScore(entry, history, goal, exerciseType)
+
+    override fun compare(
+        current: WorkoutEntry,
+        previous: WorkoutEntry?,
+        history: List<WorkoutEntry>,
+        goal: TrainingGoal,
+        exerciseType: ExerciseType,
+        bodyWeightKg: Double?,
+        isBodyweightExercise: Boolean
+    ): ComparisonResult = compare(current, previous, history, goal, exerciseType)
+
+    override fun compareDays(
+        muscleGroupName: String,
+        allExercises: List<Exercise>,
+        allEntries: List<WorkoutEntry>,
+        goal: TrainingGoal,
+        bodyWeightKg: Double?
+    ): WorkoutDayReport? = compareDays(muscleGroupName, allExercises, allEntries, goal)
+
+    override fun compareSessionByDate(
+        selectedDateStorage: String,
+        allExercises: List<Exercise>,
+        allEntries: List<WorkoutEntry>,
+        goal: TrainingGoal,
+        bodyWeightKg: Double?
+    ): WorkoutDayReport? = compareSessionByDate(selectedDateStorage, allExercises, allEntries, goal)
 
     /** Объём нагрузки (гипертрофия) */
     private fun calcVolume(entry: WorkoutEntry): Double {

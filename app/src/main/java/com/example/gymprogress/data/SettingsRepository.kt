@@ -25,6 +25,9 @@ class SettingsRepository(private val context: Context) {
     private val deloadIntervalKey = intPreferencesKey("trainer_deload_interval_weeks")
     private val progressionTypeKey = stringPreferencesKey("trainer_progression_type")
     private val bodyWeightKey = stringPreferencesKey("body_weight_kg")
+    private val scoringSystemKey = stringPreferencesKey("scoring_system")
+    private val heightCmKey = stringPreferencesKey("height_cm")
+    private val genderKey = stringPreferencesKey("user_gender")
 
     val trainingGoal: Flow<TrainingGoal> = context.dataStore.data.map { prefs ->
         val name = prefs[goalKey] ?: TrainingGoal.HYPERTROPHY.name
@@ -34,6 +37,17 @@ class SettingsRepository(private val context: Context) {
     suspend fun setTrainingGoal(goal: TrainingGoal) {
         context.dataStore.edit { prefs ->
             prefs[goalKey] = goal.name
+        }
+    }
+
+    val scoringSystem: Flow<ScoringSystem> = context.dataStore.data.map { prefs ->
+        val name = prefs[scoringSystemKey] ?: ScoringSystem.SIMPLIFIED.name
+        ScoringSystem.entries.find { it.name == name } ?: ScoringSystem.SIMPLIFIED
+    }
+
+    suspend fun setScoringSystem(system: ScoringSystem) {
+        context.dataStore.edit { prefs ->
+            prefs[scoringSystemKey] = system.name
         }
     }
 
@@ -49,6 +63,37 @@ class SettingsRepository(private val context: Context) {
                 prefs[bodyWeightKey] = value.toString()
             }
         }
+    }
+
+    val heightCm: Flow<Int?> = context.dataStore.data.map { prefs ->
+        prefs[heightCmKey]?.toIntOrNull()?.takeIf { it in 50..300 }
+    }
+
+    suspend fun setHeightCm(value: Int?) {
+        context.dataStore.edit { prefs ->
+            if (value == null || value !in 50..300) {
+                prefs.remove(heightCmKey)
+            } else {
+                prefs[heightCmKey] = value.toString()
+            }
+        }
+    }
+
+    val gender: Flow<Gender?> = context.dataStore.data.map { prefs ->
+        prefs[genderKey]?.let { name -> Gender.entries.find { it.name == name } }
+    }
+
+    suspend fun setGender(value: Gender?) {
+        context.dataStore.edit { prefs ->
+            if (value == null) prefs.remove(genderKey)
+            else prefs[genderKey] = value.name
+        }
+    }
+
+    /** Проверка: все обязательные поля антропометрии заполнены для упрощённой системы */
+    val isAnthropometryComplete: Flow<Boolean> = context.dataStore.data.map { prefs ->
+        val bw = prefs[bodyWeightKey]?.toDoubleOrNull()?.takeIf { it > 0.0 }
+        bw != null
     }
 
     val trainerSettings: Flow<TrainerSettings> = context.dataStore.data.map { prefs ->

@@ -20,7 +20,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.Card
@@ -55,6 +55,7 @@ import com.example.gymprogress.data.ProgressStatus
 import com.example.gymprogress.data.TrainingGoal
 import com.example.gymprogress.data.WorkoutDayReport
 import com.example.gymprogress.data.WorkoutEntry
+import com.example.gymprogress.data.ScoringEngine
 import com.example.gymprogress.data.WorkoutScoreCalculator
 import com.example.gymprogress.ui.theme.CardShape
 import com.example.gymprogress.ui.theme.CardShapeSmall
@@ -120,7 +121,8 @@ internal fun StatCard(
 internal fun HistoryRow(
     entry: WorkoutEntry,
     maxWeight: Double,
-    comparison: ComparisonResult
+    comparison: ComparisonResult,
+    isSimplified: Boolean = false
 ) {
     var showDetailDialog by remember { mutableStateOf(false) }
 
@@ -230,6 +232,7 @@ internal fun HistoryRow(
         ScoreDetailDialog(
             comparison = comparison,
             exerciseName = entry.exerciseName,
+            isSimplified = isSimplified,
             onDismiss = { showDetailDialog = false }
         )
     }
@@ -239,6 +242,7 @@ internal fun HistoryRow(
 internal fun ScoreDetailDialog(
     comparison: ComparisonResult,
     exerciseName: String,
+    isSimplified: Boolean = false,
     onDismiss: () -> Unit
 ) {
     val d = comparison.details ?: return
@@ -271,7 +275,8 @@ internal fun ScoreDetailDialog(
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    "${d.goalName} \u00B7 ${d.exerciseTypeName} \u00B7 ${d.targetRange} повт.",
+                    if (isSimplified) "Оценочный 1RM · Epley"
+                    else "${d.goalName} \u00B7 ${d.exerciseTypeName} \u00B7 ${d.targetRange} повт.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -308,37 +313,53 @@ internal fun ScoreDetailDialog(
                 Spacer(modifier = Modifier.height(12.dp))
 
                 val c = d.currentComponents
-                val metricStr = when (d.metricType.displayName) {
-                    "Объём" -> "${FormatUtils.formatVolume(c.metricValue)} кг"
-                    "E1RM" -> "${FormatUtils.formatWeight(c.metricValue)} кг"
-                    "Стимул" -> "${c.metricValue.toInt()} / 100"
-                    else -> "${c.metricValue.toInt()} повт."
-                }
-                ScoreRow("📊 ${c.metricLabel}", metricStr, null, null)
-                if (c.tensionScore != null) {
-                    ScoreRow("💪 Напряжение", "${(c.tensionScore * 100).toInt()}%", null, null)
-                }
-                if (c.productiveScore != null) {
-                    ScoreRow("🔄 Продуктивность", "${(c.productiveScore * 100).toInt()}%", null, null)
-                }
-                ScoreRow("🔁 Подходы × Повторы", "${d.currentSets} × [${d.currentReps.joinToString(", ")}]", null, null)
-                ScoreRow("⭐ Качество (${d.targetRange})", "${(d.currentRepQuality * 100).toInt()}%", null, null)
-                if (c.fatiguePenalty > 0) ScoreRow("⚠️ Усталость", "Неравномерность", null, -c.fatiguePenalty)
-                Spacer(modifier = Modifier.height(8.dp))
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                Spacer(modifier = Modifier.height(8.dp))
-                if (isFirst) {
-                    ScoreRow("🎯 Балл", "${d.currentScore} / 1000", null, null)
-                } else {
-                    val baselineMetricStr = when (d.metricType.displayName) {
-                        "Объём" -> FormatUtils.formatVolume(d.baselineMetric)
-                        "E1RM" -> FormatUtils.formatWeight(d.baselineMetric)
-                        "Стимул" -> d.baselineMetric.toInt().toString()
-                        else -> d.baselineMetric.toInt().toString()
+
+                if (isSimplified) {
+                    ScoreRow("💪 Оценочный 1RM", "${String.format(java.util.Locale.US, "%.1f", c.metricValue)} кг", null, null)
+                    if (!isFirst) {
+                        ScoreRow("📊 Базовый 1RM", "${String.format(java.util.Locale.US, "%.1f", d.baselineMetric)} кг", null, null)
                     }
-                    ScoreRow("📊 ${c.metricLabel}", "$metricStr (база: $baselineMetricStr)", null, null)
-                    ScoreRowPct("🎯 Прогресс", "vs среднее за 3 сессии",
-                        null, 0.0, highlight = true, overridePct = comparison.deltaPercent)
+                    ScoreRow("🔁 Подходы", "${d.currentSets} × [${d.currentReps.joinToString(", ")}]", null, null)
+                    if (!isFirst) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        ScoreRowPct("📈 Прогресс", "vs среднее за 3 сессии",
+                            null, 0.0, highlight = true, overridePct = comparison.deltaPercent)
+                    }
+                } else {
+                    val metricStr = when (d.metricType.displayName) {
+                        "Объём" -> "${FormatUtils.formatVolume(c.metricValue)} кг"
+                        "E1RM" -> "${FormatUtils.formatWeight(c.metricValue)} кг"
+                        "Стимул" -> "${c.metricValue.toInt()} / 100"
+                        else -> "${c.metricValue.toInt()} повт."
+                    }
+                    ScoreRow("📊 ${c.metricLabel}", metricStr, null, null)
+                    if (c.tensionScore != null) {
+                        ScoreRow("💪 Напряжение", "${(c.tensionScore * 100).toInt()}%", null, null)
+                    }
+                    if (c.productiveScore != null) {
+                        ScoreRow("🔄 Продуктивность", "${(c.productiveScore * 100).toInt()}%", null, null)
+                    }
+                    ScoreRow("🔁 Подходы × Повторы", "${d.currentSets} × [${d.currentReps.joinToString(", ")}]", null, null)
+                    ScoreRow("⭐ Качество (${d.targetRange})", "${(d.currentRepQuality * 100).toInt()}%", null, null)
+                    if (c.fatiguePenalty > 0) ScoreRow("⚠️ Усталость", "Неравномерность", null, -c.fatiguePenalty)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    if (isFirst) {
+                        ScoreRow("🎯 Балл", "${d.currentScore} / 1000", null, null)
+                    } else {
+                        val baselineMetricStr = when (d.metricType.displayName) {
+                            "Объём" -> FormatUtils.formatVolume(d.baselineMetric)
+                            "E1RM" -> FormatUtils.formatWeight(d.baselineMetric)
+                            "Стимул" -> d.baselineMetric.toInt().toString()
+                            else -> d.baselineMetric.toInt().toString()
+                        }
+                        ScoreRow("📊 ${c.metricLabel}", "$metricStr (база: $baselineMetricStr)", null, null)
+                        ScoreRowPct("🎯 Прогресс", "vs среднее за 3 сессии",
+                            null, 0.0, highlight = true, overridePct = comparison.deltaPercent)
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
@@ -488,7 +509,7 @@ internal fun WorkoutCalendar(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 IconButton(onClick = onPreviousMonth) {
-                    Icon(Icons.Default.ArrowBack, contentDescription = "Предыдущий месяц")
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Предыдущий месяц")
                 }
                 val monthName = month.month
                     .getDisplayName(TextStyle.FULL_STANDALONE, Locale.forLanguageTag("ru"))
@@ -500,7 +521,7 @@ internal fun WorkoutCalendar(
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 IconButton(onClick = onNextMonth) {
-                    Icon(Icons.Default.ArrowBack, contentDescription = "Следующий месяц", modifier = Modifier.graphicsLayer { scaleX = -1f })
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Следующий месяц", modifier = Modifier.graphicsLayer { scaleX = -1f })
                 }
             }
 
@@ -587,7 +608,10 @@ internal fun WorkoutDaySection(
     allEntries: List<WorkoutEntry>,
     selectedMuscleGroup: MuscleGroup?,
     onMuscleGroupSelected: (MuscleGroup) -> Unit,
-    trainingGoal: TrainingGoal
+    trainingGoal: TrainingGoal,
+    scoringEngine: ScoringEngine = WorkoutScoreCalculator,
+    bodyWeightKg: Double? = null,
+    isSimplified: Boolean = false
 ) {
     Text("Группа мышц", style = MaterialTheme.typography.labelMedium,
         fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -609,16 +633,17 @@ internal fun WorkoutDaySection(
     }
     Spacer(modifier = Modifier.height(16.dp))
     if (selectedMuscleGroup != null) {
-        val report = remember(selectedMuscleGroup, allEntries, trainingGoal) {
-            WorkoutScoreCalculator.compareDays(
+        val report = remember(selectedMuscleGroup, allEntries, trainingGoal, scoringEngine) {
+            scoringEngine.compareDays(
                 muscleGroupName = selectedMuscleGroup.name,
                 allExercises = exercises,
                 allEntries = allEntries,
-                goal = trainingGoal
+                goal = trainingGoal,
+                bodyWeightKg = bodyWeightKg
             )
         }
         if (report != null) {
-            WorkoutDayReportView(report)
+            WorkoutDayReportView(report, isSimplified = isSimplified)
         } else {
             Box(modifier = Modifier.fillMaxWidth().padding(top = 32.dp),
                 contentAlignment = Alignment.Center) {
@@ -633,7 +658,8 @@ internal fun WorkoutDaySection(
 @Composable
 internal fun WorkoutDayReportView(
     report: WorkoutDayReport,
-    showOverallCard: Boolean = true
+    showOverallCard: Boolean = true,
+    isSimplified: Boolean = false
 ) {
     if (showOverallCard) {
         val displayName = MuscleGroup.entries.find { it.name == report.muscleGroupName }?.displayName
@@ -692,13 +718,13 @@ internal fun WorkoutDayReportView(
     // Без verticalScroll: WorkoutDayReportView используется как item() внутри LazyColumn;
     // вложенная прокрутка даёт бесконечную высоту и IllegalStateException.
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        report.exercises.forEach { ex -> ExerciseDayRow(ex) }
+        report.exercises.forEach { ex -> ExerciseDayRow(ex, isSimplified = isSimplified) }
         Spacer(modifier = Modifier.height(Spacing.md))
     }
 }
 
 @Composable
-internal fun ExerciseDayRow(ex: ExerciseDayScore) {
+internal fun ExerciseDayRow(ex: ExerciseDayScore, isSimplified: Boolean = false) {
     var expanded by remember { mutableStateOf(false) }
     val hasPrev = ex.previousEntry != null && ex.currentEntry != null
     val statusColor = when (ex.status) {
@@ -770,26 +796,66 @@ internal fun ExerciseDayRow(ex: ExerciseDayScore) {
                 Spacer(modifier = Modifier.height(10.dp))
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 Spacer(modifier = Modifier.height(8.dp))
-                DayComponentRow("📊 ${pc.metricLabel}", ptr?.metricValue, pc.metricValue, highlight = false)
-                DayComponentRow("⭐ Качество", ptr?.repQuality, pc.repQuality, highlight = false)
-                if (pc.fatiguePenalty > 0 || (ptr?.fatiguePenalty ?: 0.0) > 0)
-                    DayComponentRow("⚠️ Усталость", ptr?.fatiguePenalty?.let { -it }, -pc.fatiguePenalty, highlight = false)
-                Spacer(modifier = Modifier.height(6.dp))
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                Spacer(modifier = Modifier.height(6.dp))
-                DayComponentRow("🎯 Балл", ptr?.totalScore?.toDouble(), pc.totalScore.toDouble(), highlight = true)
-                Row(modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text("📈 Прогресс", style = MaterialTheme.typography.bodySmall,
-                        modifier = Modifier.weight(1f), fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface)
-                    val pctColor = when {
-                        ex.deltaPercent >= 1.0 -> Color(0xFF4CAF50)
-                        ex.deltaPercent <= -1.0 -> MaterialTheme.colorScheme.error
-                        else -> MaterialTheme.colorScheme.onSurfaceVariant
+
+                if (isSimplified) {
+                    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("💪 Оценочный 1RM", style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                        Text("${String.format(java.util.Locale.US, "%.1f", pc.metricValue)} кг",
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.Black, color = Volt)
                     }
-                    val sign = if (ex.deltaPercent >= 0) "+" else ""
-                    Text("$sign${String.format(java.util.Locale.US, "%.1f", ex.deltaPercent)}%",
-                        style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = pctColor)
+                    if (ptr != null) {
+                        Row(modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("📊 Базовый 1RM", style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("${String.format(java.util.Locale.US, "%.1f", ptr.metricValue)} кг",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically) {
+                        Text("📈 Прогресс", style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                        val pctColor = when {
+                            ex.deltaPercent >= 1.0 -> Color(0xFF4CAF50)
+                            ex.deltaPercent <= -1.0 -> MaterialTheme.colorScheme.error
+                            else -> MaterialTheme.colorScheme.onSurfaceVariant
+                        }
+                        val sign = if (ex.deltaPercent >= 0) "+" else ""
+                        Text("$sign${String.format(java.util.Locale.US, "%.1f", ex.deltaPercent)}%",
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.Black, color = pctColor)
+                    }
+                } else {
+                    DayComponentRow("📊 ${pc.metricLabel}", ptr?.metricValue, pc.metricValue, highlight = false)
+                    DayComponentRow("⭐ Качество", ptr?.repQuality, pc.repQuality, highlight = false)
+                    if (pc.fatiguePenalty > 0 || (ptr?.fatiguePenalty ?: 0.0) > 0)
+                        DayComponentRow("⚠️ Усталость", ptr?.fatiguePenalty?.let { -it }, -pc.fatiguePenalty, highlight = false)
+                    Spacer(modifier = Modifier.height(6.dp))
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    Spacer(modifier = Modifier.height(6.dp))
+                    DayComponentRow("🎯 Балл", ptr?.totalScore?.toDouble(), pc.totalScore.toDouble(), highlight = true)
+                    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text("📈 Прогресс", style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.weight(1f), fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface)
+                        val pctColor = when {
+                            ex.deltaPercent >= 1.0 -> Color(0xFF4CAF50)
+                            ex.deltaPercent <= -1.0 -> MaterialTheme.colorScheme.error
+                            else -> MaterialTheme.colorScheme.onSurfaceVariant
+                        }
+                        val sign = if (ex.deltaPercent >= 0) "+" else ""
+                        Text("$sign${String.format(java.util.Locale.US, "%.1f", ex.deltaPercent)}%",
+                            style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = pctColor)
+                    }
                 }
             }
         }

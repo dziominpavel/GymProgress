@@ -42,6 +42,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.example.gymprogress.data.FormatUtils
+import com.example.gymprogress.data.Gender
+import com.example.gymprogress.data.ScoringSystem
 import com.example.gymprogress.data.TrainingGoal
 import com.example.gymprogress.ui.theme.CardShape
 import com.example.gymprogress.ui.theme.Spacing
@@ -51,8 +53,15 @@ import com.example.gymprogress.ui.theme.Volt
 fun SettingsScreen(
     currentGoal: TrainingGoal,
     bodyWeightKg: Double?,
+    currentScoringSystem: ScoringSystem,
+    currentGender: Gender?,
+    currentHeightCm: Int?,
+    isAnthropometryComplete: Boolean,
     onGoalChanged: (TrainingGoal) -> Unit,
     onBodyWeightChanged: (Double?) -> Unit,
+    onScoringSystemChanged: (ScoringSystem) -> Unit,
+    onGenderChanged: (Gender?) -> Unit,
+    onHeightCmChanged: (Int?) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -60,20 +69,35 @@ fun SettingsScreen(
         mutableStateOf(bodyWeightKg?.let { FormatUtils.formatWeight(it) } ?: "")
     }
     var bodyWeightError by remember { mutableStateOf(false) }
-    fun saveBodyWeight(): Boolean {
-        val value = bodyWeightText.replace(",", ".").toDoubleOrNull()
-        return if (bodyWeightText.isBlank()) {
+    var heightText by remember(currentHeightCm) {
+        mutableStateOf(currentHeightCm?.toString() ?: "")
+    }
+    var heightError by remember { mutableStateOf(false) }
+    fun saveAll(): Boolean {
+        var ok = true
+        val bwValue = bodyWeightText.replace(",", ".").toDoubleOrNull()
+        if (bodyWeightText.isBlank()) {
             onBodyWeightChanged(null)
             bodyWeightError = false
-            true
-        } else if (value != null && value > 0) {
-            onBodyWeightChanged(value)
+        } else if (bwValue != null && bwValue > 0) {
+            onBodyWeightChanged(bwValue)
             bodyWeightError = false
-            true
         } else {
             bodyWeightError = true
-            false
+            ok = false
         }
+        val hValue = heightText.toIntOrNull()
+        if (heightText.isBlank()) {
+            onHeightCmChanged(null)
+            heightError = false
+        } else if (hValue != null && hValue in 50..300) {
+            onHeightCmChanged(hValue)
+            heightError = false
+        } else {
+            heightError = true
+            ok = false
+        }
+        return ok
     }
     Scaffold(
         modifier = modifier,
@@ -91,7 +115,7 @@ fun SettingsScreen(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 IconButton(
                     onClick = {
-                        if (saveBodyWeight()) {
+                        if (saveAll()) {
                             onBack()
                         }
                     },
@@ -122,15 +146,110 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(Spacing.xl))
 
+            // ── Система оценки прогресса ──
             Text(
-                text = "Вес тела",
+                text = "Система оценки прогресса",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface
             )
             Spacer(modifier = Modifier.height(Spacing.xxs))
             Text(
-                text = "Нужен для упражнений с собственным весом",
+                text = "Определяет, как рассчитывается прогресс по упражнениям",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(Spacing.md))
+
+            ScoringSystem.entries.forEach { system ->
+                val isSelected = system == currentScoringSystem
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp)
+                        .clip(CardShape)
+                        .clickable { onScoringSystemChanged(system) }
+                        .then(
+                            if (isSelected) Modifier.border(
+                                1.5.dp,
+                                Volt.copy(alpha = 0.5f),
+                                CardShape
+                            ) else Modifier
+                        ),
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (isSelected) Volt.copy(alpha = 0.08f)
+                        else MaterialTheme.colorScheme.surface
+                    ),
+                    shape = CardShape
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(Spacing.md),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(
+                            selected = isSelected,
+                            onClick = { onScoringSystemChanged(system) },
+                            colors = RadioButtonDefaults.colors(selectedColor = Volt)
+                        )
+                        Spacer(modifier = Modifier.width(Spacing.sm))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = system.displayName,
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = if (isSelected) Volt
+                                else MaterialTheme.colorScheme.onSurface
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = system.description,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+
+            if (currentScoringSystem == ScoringSystem.SIMPLIFIED && !isAnthropometryComplete) {
+                Spacer(modifier = Modifier.height(Spacing.sm))
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer
+                    ),
+                    shape = CardShape
+                ) {
+                    Column(modifier = Modifier.padding(Spacing.md)) {
+                        Text(
+                            text = "Укажите вес тела",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                        Spacer(modifier = Modifier.height(Spacing.xxs))
+                        Text(
+                            text = "Для корректной работы упрощённой системы необходимо указать вес тела. Без него оценка для упражнений с собственным весом будет недоступна.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(Spacing.xl))
+
+            // ── Антропометрия ──
+            Text(
+                text = "Параметры тела",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Spacer(modifier = Modifier.height(Spacing.xxs))
+            Text(
+                text = "Нужны для упражнений с собственным весом и точности оценки",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -148,10 +267,59 @@ fun SettingsScreen(
                 shape = RoundedCornerShape(12.dp),
                 modifier = Modifier.fillMaxWidth()
             )
-            Spacer(modifier = Modifier.height(Spacing.md))
-            TextButton(onClick = { saveBodyWeight() }) {
-                Text("Сохранить вес", fontWeight = FontWeight.Bold)
+            Spacer(modifier = Modifier.height(Spacing.sm))
+            OutlinedTextField(
+                value = heightText,
+                onValueChange = {
+                    heightText = it
+                    heightError = false
+                },
+                label = { Text("Рост (см)") },
+                singleLine = true,
+                isError = heightError,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(modifier = Modifier.height(Spacing.sm))
+
+            Text(
+                text = "Пол",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(Spacing.xxs))
+            Row {
+                Gender.entries.forEach { g ->
+                    val isSelected = g == currentGender
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable { onGenderChanged(g) }
+                            .padding(end = Spacing.md)
+                    ) {
+                        RadioButton(
+                            selected = isSelected,
+                            onClick = { onGenderChanged(g) },
+                            colors = RadioButtonDefaults.colors(selectedColor = Volt)
+                        )
+                        Text(
+                            text = g.displayName,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = if (isSelected) Volt else MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                }
             }
+
+            Spacer(modifier = Modifier.height(Spacing.md))
+            TextButton(onClick = { saveAll() }) {
+                Text("Сохранить параметры", fontWeight = FontWeight.Bold)
+            }
+
+            Spacer(modifier = Modifier.height(Spacing.lg))
 
             Text(
                 text = "Цель тренировок",
@@ -239,15 +407,26 @@ fun SettingsScreen(
                     )
                     Spacer(modifier = Modifier.height(Spacing.xs))
                     Text(
-                        text = "• Гипертрофия — акцент на объём и качество повторов (8–12)\n" +
-                                "• Сила — акцент на рабочий вес (3–6 повторов)\n" +
-                                "• Выносливость — акцент на объём и количество повторов (15–25)",
+                        text = if (currentScoringSystem == ScoringSystem.SIMPLIFIED) {
+                            "Упрощённая система:\n" +
+                            "• Оценочный 1RM (кг) — максимальный вес на 1 повторение\n" +
+                            "• Формула Epley с учётом лестницы усилия\n" +
+                            "• Последний подход считается ближе к отказу\n" +
+                            "• Прогресс = рост/падение 1RM во времени"
+                        } else {
+                            "Усложнённая система:\n" +
+                            "• Гипертрофия — составной стимул (напряжение + продуктивность + качество)\n" +
+                            "• Сила — акцент на рабочий вес (3–6 повторов)\n" +
+                            "• Выносливость — акцент на объём и количество повторов (15–25)"
+                        },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         lineHeight = MaterialTheme.typography.bodySmall.lineHeight * 1.3
                     )
                 }
             }
+
+            Spacer(modifier = Modifier.height(Spacing.xl))
         }
     }
 }

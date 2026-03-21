@@ -18,7 +18,12 @@ import com.example.gymprogress.data.TrainingGoal
 import com.example.gymprogress.data.WorkoutEntry
 import com.example.gymprogress.data.WorkoutRecommendation
 import com.example.gymprogress.data.ExerciseRecommendation
+import com.example.gymprogress.data.Gender
 import com.example.gymprogress.data.PreviousSessionInSplit
+import com.example.gymprogress.data.ScoringEngine
+import com.example.gymprogress.data.ScoringSystem
+import com.example.gymprogress.data.SimplifiedScoreCalculator
+import com.example.gymprogress.data.WorkoutScoreCalculator
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -71,6 +76,28 @@ class WorkoutViewModel(application: Application) : AndroidViewModel(application)
 
     val bodyWeightKg: StateFlow<Double?> = settingsRepository.bodyWeightKg
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    val scoringSystem: StateFlow<ScoringSystem> = settingsRepository.scoringSystem
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ScoringSystem.SIMPLIFIED)
+
+    val heightCm: StateFlow<Int?> = settingsRepository.heightCm
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    val gender: StateFlow<Gender?> = settingsRepository.gender
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    val isAnthropometryComplete: StateFlow<Boolean> = settingsRepository.isAnthropometryComplete
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
+    /** Текущий движок скоринга на основе выбранной системы */
+    val scoringEngine: StateFlow<ScoringEngine> = scoringSystem
+        .map { system ->
+            when (system) {
+                ScoringSystem.SIMPLIFIED -> SimplifiedScoreCalculator
+                ScoringSystem.ADVANCED -> WorkoutScoreCalculator
+            }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), SimplifiedScoreCalculator)
 
     val trainerSettings: StateFlow<TrainerSettings> = settingsRepository.trainerSettings
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), TrainerSettings())
@@ -311,6 +338,39 @@ class WorkoutViewModel(application: Application) : AndroidViewModel(application)
             } catch (e: Exception) {
                 _errorMessage.value = e.message ?: "Не удалось сохранить вес"
                 Log.e(TAG, "Failed to set body weight", e)
+            }
+        }
+    }
+
+    fun setScoringSystem(system: ScoringSystem) {
+        viewModelScope.launch {
+            try {
+                settingsRepository.setScoringSystem(system)
+            } catch (e: Exception) {
+                _errorMessage.value = e.message ?: "Не удалось сохранить систему оценки"
+                Log.e(TAG, "Failed to set scoring system", e)
+            }
+        }
+    }
+
+    fun setHeightCm(value: Int?) {
+        viewModelScope.launch {
+            try {
+                settingsRepository.setHeightCm(value)
+            } catch (e: Exception) {
+                _errorMessage.value = e.message ?: "Не удалось сохранить рост"
+                Log.e(TAG, "Failed to set height", e)
+            }
+        }
+    }
+
+    fun setGender(value: Gender?) {
+        viewModelScope.launch {
+            try {
+                settingsRepository.setGender(value)
+            } catch (e: Exception) {
+                _errorMessage.value = e.message ?: "Не удалось сохранить пол"
+                Log.e(TAG, "Failed to set gender", e)
             }
         }
     }

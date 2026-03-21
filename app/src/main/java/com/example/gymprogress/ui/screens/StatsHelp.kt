@@ -221,3 +221,112 @@ internal fun HelpRow(label: String, value: String) {
     }
 }
 
+@Composable
+internal fun SimplifiedHelpDialog(onDismiss: () -> Unit) {
+    val scroll = rememberScrollState()
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            shape = RoundedCornerShape(28.dp),
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 6.dp,
+            modifier = Modifier.fillMaxHeight(0.92f)
+        ) {
+            Column {
+                Column(modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 24.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Info, contentDescription = null, tint = Volt,
+                            modifier = Modifier.size(20.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Упрощённая оценка (1RM)",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Black)
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text("Как рассчитывается оценочный одноразовый максимум",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(modifier = Modifier.height(16.dp))
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                }
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .verticalScroll(scroll)
+                        .padding(horizontal = 24.dp, vertical = 16.dp)
+                ) {
+                    HelpHeader("💪 Что такое E1RM")
+                    Text("Оценочный одноразовый максимум (Estimated 1RM) — это расчётный вес, который вы могли бы поднять ровно 1 раз. Он вычисляется из ваших рабочих подходов.",
+                        style = MaterialTheme.typography.bodySmall)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    HelpFormula("E1RM = вес × (1 + повторения / 30)\nФормула Epley — одна из самых проверенных")
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    HelpHeader("📊 Оценочный и базовый 1RM")
+                    Text("В приложении вы видите два значения 1RM:",
+                        style = MaterialTheme.typography.bodySmall)
+                    Spacer(modifier = Modifier.height(6.dp))
+                    HelpRow("Оценочный 1RM", "Сегодняшний расчёт по последней сессии")
+                    HelpRow("Базовый 1RM", "Среднее за 3 предыдущие сессии")
+                    Spacer(modifier = Modifier.height(6.dp))
+                    HelpNote("Прогресс считается как отклонение сегодняшнего 1RM от базового. Это помогает сгладить случайные колебания.")
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    HelpHeader("📐 Лестница усилия")
+                    Text("Вы не вводите RIR (запас повторений). Вместо этого система использует допущение:",
+                        style = MaterialTheme.typography.bodySmall)
+                    Spacer(modifier = Modifier.height(6.dp))
+                    HelpRow("Последний подход", "≈ 1 RIR (×1.00)")
+                    HelpRow("Предпоследний", "≈ 2 RIR (×0.97)")
+                    HelpRow("Третий с конца", "≈ 3 RIR (×0.94)")
+                    HelpRow("Четвёртый+", "≈ 4 RIR (×0.91)")
+                    Spacer(modifier = Modifier.height(6.dp))
+                    HelpNote("Допущение: вы тренируетесь «к отказу» к концу сессии. Если ваш стиль другой (обратная пирамида, первый тяжёлый сет), оценка может быть менее точной.")
+                    Spacer(modifier = Modifier.height(20.dp))
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    HelpHeader("📈 Как считается прогресс")
+                    Text("Текущий E1RM сравнивается со средним за последние 3 сессии.",
+                        style = MaterialTheme.typography.bodySmall)
+                    Spacer(modifier = Modifier.height(6.dp))
+                    HelpFormula("Прогресс % = (1RM_сегодня − среднее_за_3) / среднее_за_3 × 100")
+                    Spacer(modifier = Modifier.height(6.dp))
+                    HelpRow("▲ Лучше", "≥ +5%")
+                    HelpRow("→ Без изменений", "от −5% до +5%")
+                    HelpRow("▼ Хуже", "≤ −5%")
+                    Spacer(modifier = Modifier.height(20.dp))
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    HelpHeader("🏋️ Упражнения с собственным весом")
+                    Text("Для подтягиваний, отжиманий и т.д. вес = вес тела + доп. отягощение. Поэтому обязательно укажите вес тела в настройках.",
+                        style = MaterialTheme.typography.bodySmall)
+                    Spacer(modifier = Modifier.height(20.dp))
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    HelpHeader("⚠️ Краевые случаи")
+                    HelpRow("1 подход", "E1RM по единственному подходу")
+                    HelpRow(">30 повторов", "Ограничено до 30 (формула нестабильна)")
+                    HelpRow("Вес = 0, не BW", "E1RM = 0")
+                    HelpRow("Нет веса тела", "BW-упражнения не оцениваются")
+                    Spacer(modifier = Modifier.height(20.dp))
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    HelpHeader("🔮 Расширяемость")
+                    Text("В будущих версиях появится возможность выбрать стиль сессии (обратная пирамида, первый тяжёлый сет и т.д.), чтобы оценка была ещё точнее.",
+                        style = MaterialTheme.typography.bodySmall)
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+                Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    TextButton(onClick = onDismiss, modifier = Modifier.align(Alignment.End)) {
+                        Text("Понятно", fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+    }
+}
+
