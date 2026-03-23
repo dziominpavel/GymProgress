@@ -27,4 +27,7 @@ interface WorkoutDao {
 
     @Query("SELECT * FROM workout_entries WHERE exerciseName = :name ORDER BY date DESC, id DESC")
     fun getEntriesByExercise(name: String): Flow<List<WorkoutEntry>>
+
+    @Query("UPDATE workout_entries SET exerciseName = :newName WHERE exerciseName = :oldName")
+    suspend fun renameExercise(oldName: String, newName: String)
 }

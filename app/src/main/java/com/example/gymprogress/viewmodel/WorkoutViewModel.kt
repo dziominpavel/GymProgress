@@ -298,10 +298,13 @@ class WorkoutViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    fun updateExercise(exercise: Exercise) {
+    fun updateExercise(exercise: Exercise, oldName: String? = null) {
         viewModelScope.launch {
             try {
                 exerciseDao.update(exercise)
+                if (oldName != null && oldName != exercise.name) {
+                    workoutDao.renameExercise(oldName, exercise.name)
+                }
             } catch (e: Exception) {
                 _errorMessage.value = e.message ?: "Не удалось обновить упражнение"
                 Log.e(TAG, "Failed to update exercise", e)

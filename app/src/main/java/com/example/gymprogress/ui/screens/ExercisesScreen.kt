@@ -71,7 +71,7 @@ fun ExercisesScreen(
     exercises: List<Exercise>,
     onAddExercise: (name: String, muscleGroup: String, exerciseType: String, isBodyweight: Boolean) -> Unit,
     onDeleteExercise: (Exercise) -> Unit,
-    onUpdateExercise: (Exercise) -> Unit,
+    onUpdateExercise: (exercise: Exercise, oldName: String?) -> Unit,
     modifier: Modifier = Modifier
 ) {
     var showAddDialog by remember { mutableStateOf(false) }
@@ -213,9 +213,11 @@ fun ExercisesScreen(
     exerciseToEdit?.let { exercise ->
         EditExerciseDialog(
             exercise = exercise,
+            existingNames = exercises.map { it.name.lowercase() }.toSet(),
             onDismiss = { exerciseToEdit = null },
             onConfirm = { updated ->
-                onUpdateExercise(updated)
+                val oldName = if (updated.name != exercise.name) exercise.name else null
+                onUpdateExercise(updated, oldName)
                 exerciseToEdit = null
             }
         )
@@ -517,6 +519,7 @@ private fun AddExerciseDialog(
 @Composable
 private fun EditExerciseDialog(
     exercise: Exercise,
+    existingNames: Set<String> = emptySet(),
     onDismiss: () -> Unit,
     onConfirm: (Exercise) -> Unit
 ) {
@@ -524,6 +527,11 @@ private fun EditExerciseDialog(
         .find { it.name == exercise.exerciseType } ?: ExerciseType.COMPOUND
     var selectedType by remember { mutableStateOf(currentType) }
     var isBodyweight by remember { mutableStateOf(exercise.isBodyweight) }
+    var name by remember { mutableStateOf(exercise.name) }
+    val nameTrimmed = name.trim()
+    val isDuplicate = nameTrimmed.lowercase() != exercise.name.lowercase() &&
+            nameTrimmed.lowercase() in existingNames
+    val isNameEmpty = nameTrimmed.isBlank()
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -532,11 +540,18 @@ private fun EditExerciseDialog(
         },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(
-                    text = exercise.name,
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurface
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("Название") },
+                    singleLine = true,
+                    isError = isDuplicate || isNameEmpty,
+                    supportingText = if (isDuplicate) {
+                        { Text("Упражнение с таким названием уже существует") }
+                    } else if (isNameEmpty && name.isNotEmpty()) {
+                        { Text("Название не может быть пустым") }
+                    } else null,
+                    modifier = Modifier.fillMaxWidth()
                 )
                 Text(
                     text = "Тип упражнения",
@@ -584,14 +599,18 @@ private fun EditExerciseDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = {
-                onConfirm(
-                    exercise.copy(
-                        exerciseType = selectedType.name,
-                        isBodyweight = isBodyweight
+            TextButton(
+                onClick = {
+                    onConfirm(
+                        exercise.copy(
+                            name = nameTrimmed,
+                            exerciseType = selectedType.name,
+                            isBodyweight = isBodyweight
+                        )
                     )
-                )
-            }) {
+                },
+                enabled = !isDuplicate && !isNameEmpty
+            ) {
                 Text("Сохранить", fontWeight = FontWeight.Bold)
             }
         },

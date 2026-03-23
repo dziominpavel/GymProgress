@@ -271,7 +271,7 @@ fun GymProgressApp(viewModel: WorkoutViewModel = viewModel()) {
                         viewModel.addExercise(name, group, type, isBodyweight)
                     },
                     onDeleteExercise = { viewModel.deleteExercise(it) },
-                    onUpdateExercise = { viewModel.updateExercise(it) },
+                    onUpdateExercise = { exercise, oldName -> viewModel.updateExercise(exercise, oldName) },
                     modifier = Modifier.fillMaxSize()
                 )
                 AppDestinations.STATS -> StatsScreen(
