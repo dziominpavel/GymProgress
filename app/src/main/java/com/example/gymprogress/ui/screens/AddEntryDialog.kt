@@ -69,14 +69,17 @@ import com.example.gymprogress.data.ExerciseRecommendation
 import com.example.gymprogress.data.ExerciseType
 import com.example.gymprogress.data.FormatUtils
 import com.example.gymprogress.data.MuscleGroup
+import com.example.gymprogress.data.ScoringEngine
+import com.example.gymprogress.data.ScoringSystem
 import com.example.gymprogress.data.TrainingGoal
 import com.example.gymprogress.data.WorkoutEntry
-import com.example.gymprogress.data.WorkoutScoreCalculator
+import com.example.gymprogress.data.selectBestSessionEntry
 import com.example.gymprogress.ui.theme.Spacing
 import com.example.gymprogress.ui.theme.Volt
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -85,6 +88,8 @@ fun AddEntryDialog(
     history: List<WorkoutEntry>,
     trainingGoal: TrainingGoal,
     bodyWeightKg: Double?,
+    scoringEngine: ScoringEngine,
+    scoringSystem: ScoringSystem,
     onDismiss: () -> Unit,
     onConfirm: (date: String, exerciseName: String, weight: Double, reps: String) -> Unit,
     preselectedExercise: String? = null,
@@ -134,12 +139,25 @@ fun AddEntryDialog(
         history.filter { it.exerciseName == name }
             .sortedWith(compareBy({ it.date }, { it.id }))
     }
-    val bestEntry = remember(exerciseHistory, trainingGoal, selectedExerciseType) {
-        exerciseHistory.maxByOrNull {
-            WorkoutScoreCalculator
-                .calcSessionScore(it, exerciseHistory, trainingGoal, selectedExerciseType)
-                .score
-        }
+    val isBodyweightSelected = selectedExercise?.isBodyweight == true
+    val bestEntry = remember(
+        exerciseHistory,
+        trainingGoal,
+        selectedExerciseType,
+        scoringEngine,
+        scoringSystem,
+        bodyWeightKg,
+        isBodyweightSelected
+    ) {
+        selectBestSessionEntry(
+            exerciseHistory,
+            scoringEngine,
+            scoringSystem,
+            trainingGoal,
+            selectedExerciseType,
+            bodyWeightKg,
+            isBodyweightSelected
+        )
     }
     val bestReps = remember(bestEntry?.reps) {
         bestEntry?.reps?.split(",")
@@ -352,6 +370,42 @@ fun AddEntryDialog(
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
+                                val metricSession = scoringEngine.calcSessionScore(
+                                    bestEntry,
+                                    exerciseHistory,
+                                    trainingGoal,
+                                    selectedExerciseType,
+                                    bodyWeightKg,
+                                    isBodyweightSelected
+                                )
+                                when (scoringSystem) {
+                                    ScoringSystem.SIMPLIFIED -> {
+                                        if (metricSession.rawMetric > 0) {
+                                            Spacer(modifier = Modifier.height(4.dp))
+                                            Text(
+                                                text = "Оценочный 1RM: ${
+                                                    String.format(
+                                                        Locale.US,
+                                                        "%.1f",
+                                                        metricSession.rawMetric
+                                                    )
+                                                } кг",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                fontWeight = FontWeight.Medium,
+                                                color = Volt
+                                            )
+                                        }
+                                    }
+                                    ScoringSystem.ADVANCED -> {
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text(
+                                            text = "Балл тренировки: ${metricSession.score}",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            fontWeight = FontWeight.Medium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
                             }
                         }
                     }

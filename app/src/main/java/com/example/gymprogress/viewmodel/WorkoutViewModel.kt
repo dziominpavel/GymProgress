@@ -37,6 +37,13 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 
+private data class TrainerRecommendationCore(
+    val settings: TrainerSettings,
+    val goal: TrainingGoal,
+    val exercises: List<Exercise>,
+    val history: List<WorkoutEntry>
+)
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class WorkoutViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -103,13 +110,28 @@ class WorkoutViewModel(application: Application) : AndroidViewModel(application)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), TrainerSettings())
 
     val workoutRecommendation: StateFlow<WorkoutRecommendation?> = combine(
-        settingsRepository.trainerSettings,
-        settingsRepository.trainingGoal,
-        exerciseDao.getAllExercises(),
-        workoutDao.getAllEntries()
-    ) { settings, goal, exercises, history ->
-        if (exercises.isEmpty()) null
-        else trainerEngine.generateRecommendation(settings, goal, exercises, history)
+        combine(
+            settingsRepository.trainerSettings,
+            settingsRepository.trainingGoal,
+            exerciseDao.getAllExercises(),
+            workoutDao.getAllEntries()
+        ) { settings, goal, exercises, history ->
+            TrainerRecommendationCore(settings, goal, exercises, history)
+        },
+        bodyWeightKg,
+        scoringEngine,
+        scoringSystem
+    ) { core, bw, engine, system ->
+        if (core.exercises.isEmpty()) null
+        else trainerEngine.generateRecommendation(
+            settings = core.settings,
+            trainingGoal = core.goal,
+            exercises = core.exercises,
+            history = core.history,
+            bodyWeightKg = bw,
+            scoringEngine = engine,
+            scoringSystem = system
+        )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     private val _journalSelectedDayIndex = MutableStateFlow<Int?>(null)
@@ -408,7 +430,10 @@ class WorkoutViewModel(application: Application) : AndroidViewModel(application)
                 exercise = exercise,
                 history = allEntries.value,
                 trainingGoal = trainingGoal.value,
-                settings = trainerSettings.value
+                settings = trainerSettings.value,
+                bodyWeightKg = bodyWeightKg.value,
+                scoringEngine = scoringEngine.value,
+                scoringSystem = scoringSystem.value
             )
         }
     }

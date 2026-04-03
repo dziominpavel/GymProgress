@@ -46,3 +46,37 @@ interface ScoringEngine {
         bodyWeightKg: Double? = null
     ): WorkoutDayReport?
 }
+
+/**
+ * Лучшая сессия по выбранной в настройках системе: упрощённая — максимальный оценочный 1RM (rawMetric),
+ * продвинутая — максимальный балл сессии (score). Совпадает с логикой вкладки «Прогресс».
+ */
+fun selectBestSessionEntry(
+    entries: List<WorkoutEntry>,
+    scoringEngine: ScoringEngine,
+    scoringSystem: ScoringSystem,
+    goal: TrainingGoal,
+    exerciseType: ExerciseType,
+    bodyWeightKg: Double?,
+    isBodyweightExercise: Boolean
+): WorkoutEntry? {
+    if (entries.isEmpty()) return null
+    return when (scoringSystem) {
+        ScoringSystem.SIMPLIFIED -> entries.maxWithOrNull(
+            compareByDescending<WorkoutEntry> { e ->
+                scoringEngine.calcSessionScore(
+                    e, entries, goal, exerciseType, bodyWeightKg, isBodyweightExercise
+                ).rawMetric
+            }.thenByDescending { it.date }
+                .thenByDescending { it.id }
+        )
+        ScoringSystem.ADVANCED -> entries.maxWithOrNull(
+            compareByDescending<WorkoutEntry> { e ->
+                scoringEngine.calcSessionScore(
+                    e, entries, goal, exerciseType, bodyWeightKg, isBodyweightExercise
+                ).score
+            }.thenByDescending { it.date }
+                .thenByDescending { it.id }
+        )
+    }
+}

@@ -10,7 +10,10 @@ class TrainerRecommendationEngine {
         settings: TrainerSettings,
         trainingGoal: TrainingGoal,
         exercises: List<Exercise>,
-        history: List<WorkoutEntry>
+        history: List<WorkoutEntry>,
+        bodyWeightKg: Double? = null,
+        scoringEngine: ScoringEngine = SimplifiedScoreCalculator,
+        scoringSystem: ScoringSystem = ScoringSystem.SIMPLIFIED
     ): WorkoutRecommendation {
         val preferredDayIndex = determineNextDayIndex(settings, history, exercises)
         val totalDays = getTotalDays(settings)
@@ -30,7 +33,10 @@ class TrainerRecommendationEngine {
                 trainingGoal = trainingGoal,
                 progressionType = settings.progressionType,
                 includeWarmup = settings.includeWarmup,
-                isDeload = isDeload
+                isDeload = isDeload,
+                bodyWeightKg = bodyWeightKg,
+                scoringEngine = scoringEngine,
+                scoringSystem = scoringSystem
             )
             if (recs.isNotEmpty()) {
                 bestDayIndex = dayIndex
@@ -74,7 +80,10 @@ class TrainerRecommendationEngine {
         exercise: Exercise,
         history: List<WorkoutEntry>,
         trainingGoal: TrainingGoal,
-        settings: TrainerSettings
+        settings: TrainerSettings,
+        bodyWeightKg: Double?,
+        scoringEngine: ScoringEngine,
+        scoringSystem: ScoringSystem
     ): ExerciseRecommendation {
         val isDeload = shouldDeload(settings, history)
         return buildExerciseRec(
@@ -84,7 +93,10 @@ class TrainerRecommendationEngine {
             progressionType = settings.progressionType,
             includeWarmup = settings.includeWarmup,
             isDeload = isDeload,
-            lastSessionDate = null
+            lastSessionDate = null,
+            bodyWeightKg = bodyWeightKg,
+            scoringEngine = scoringEngine,
+            scoringSystem = scoringSystem
         )
     }
 
@@ -329,7 +341,10 @@ class TrainerRecommendationEngine {
         trainingGoal: TrainingGoal,
         progressionType: ProgressionType,
         includeWarmup: Boolean,
-        isDeload: Boolean
+        isDeload: Boolean,
+        bodyWeightKg: Double?,
+        scoringEngine: ScoringEngine,
+        scoringSystem: ScoringSystem
     ): List<ExerciseRecommendation> {
         val result = mutableListOf<ExerciseRecommendation>()
         val lastSessionNames = getLastSessionExercises(muscleGroups, exercises, history)
@@ -356,7 +371,10 @@ class TrainerRecommendationEngine {
                         progressionType = progressionType,
                         includeWarmup = includeWarmup,
                         isDeload = isDeload,
-                        lastSessionDate = lastSessionDate
+                        lastSessionDate = lastSessionDate,
+                        bodyWeightKg = bodyWeightKg,
+                        scoringEngine = scoringEngine,
+                        scoringSystem = scoringSystem
                     )
                 )
             }
@@ -436,7 +454,10 @@ class TrainerRecommendationEngine {
         progressionType: ProgressionType,
         includeWarmup: Boolean,
         isDeload: Boolean,
-        lastSessionDate: String?
+        lastSessionDate: String?,
+        bodyWeightKg: Double?,
+        scoringEngine: ScoringEngine,
+        scoringSystem: ScoringSystem
     ): ExerciseRecommendation {
         val exerciseHistory = history
             .filter { it.exerciseName == exercise.name }
@@ -472,11 +493,16 @@ class TrainerRecommendationEngine {
 
         val exerciseType = ExerciseType.entries
             .find { it.name == exercise.exerciseType } ?: ExerciseType.COMPOUND
-        val bestEntry = exerciseHistory.maxByOrNull {
-            WorkoutScoreCalculator
-                .calcSessionScore(it, exerciseHistory, trainingGoal, exerciseType)
-                .score
-        }
+        val isBw = exercise.isBodyweight
+        val bestEntry = selectBestSessionEntry(
+            exerciseHistory,
+            scoringEngine,
+            scoringSystem,
+            trainingGoal,
+            exerciseType,
+            bodyWeightKg,
+            isBw
+        )
 
         val (suggestedWeight, note) = calculateProgression(
             lastWeight = lastWeight,
@@ -493,7 +519,10 @@ class TrainerRecommendationEngine {
             history = exerciseHistory,
             trainingGoal = trainingGoal,
             exerciseType = exerciseType,
-            targetRange = targetRange
+            targetRange = targetRange,
+            bodyWeightKg = bodyWeightKg,
+            scoringEngine = scoringEngine,
+            isBodyweightExercise = isBw
         )
 
         val (workingSets, volumeNote) = determineWorkingSets(
@@ -524,7 +553,10 @@ class TrainerRecommendationEngine {
             exerciseType = exerciseType,
             weightStep = weightStep,
             snapshot = progressSnapshot,
-            volumeNote = volumeNote
+            volumeNote = volumeNote,
+            bodyWeightKg = bodyWeightKg,
+            scoringEngine = scoringEngine,
+            isBodyweightExercise = isBw
         )
 
         return ExerciseRecommendation(
@@ -545,15 +577,22 @@ class TrainerRecommendationEngine {
         exerciseType: ExerciseType,
         weightStep: Double,
         snapshot: ProgressSnapshot,
-        volumeNote: String?
+        volumeNote: String?,
+        bodyWeightKg: Double?,
+        scoringEngine: ScoringEngine,
+        isBodyweightExercise: Boolean
     ): String? {
         if (bestEntry == null) return null
 
-        val lastScore = WorkoutScoreCalculator
-            .calcSessionScore(lastEntry, history, trainingGoal, exerciseType)
+        val lastScore = scoringEngine
+            .calcSessionScore(
+                lastEntry, history, trainingGoal, exerciseType, bodyWeightKg, isBodyweightExercise
+            )
             .score
-        val bestScore = WorkoutScoreCalculator
-            .calcSessionScore(bestEntry, history, trainingGoal, exerciseType)
+        val bestScore = scoringEngine
+            .calcSessionScore(
+                bestEntry, history, trainingGoal, exerciseType, bodyWeightKg, isBodyweightExercise
+            )
             .score
 
         val lastReps = parseReps(lastEntry.reps)
@@ -598,20 +637,27 @@ class TrainerRecommendationEngine {
         history: List<WorkoutEntry>,
         trainingGoal: TrainingGoal,
         exerciseType: ExerciseType,
-        targetRange: IntRange
+        targetRange: IntRange,
+        bodyWeightKg: Double?,
+        scoringEngine: ScoringEngine,
+        isBodyweightExercise: Boolean
     ): ProgressSnapshot {
-        val lastScore = WorkoutScoreCalculator.calcSessionScore(
+        val lastScore = scoringEngine.calcSessionScore(
             lastEntry,
             history,
             trainingGoal,
-            exerciseType
+            exerciseType,
+            bodyWeightKg,
+            isBodyweightExercise
         )
         val previousScore = previousEntry?.let {
-            WorkoutScoreCalculator.calcSessionScore(
+            scoringEngine.calcSessionScore(
                 it,
                 history,
                 trainingGoal,
-                exerciseType
+                exerciseType,
+                bodyWeightKg,
+                isBodyweightExercise
             )
         }
 
