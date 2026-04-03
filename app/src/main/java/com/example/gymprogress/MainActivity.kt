@@ -340,7 +340,9 @@ fun GymProgressApp(viewModel: WorkoutViewModel = viewModel()) {
             scoringSystem = scoringSystem,
             preselectedExercise = preselectedExerciseForAdd,
             exerciseRecommendation = exerciseRecommendationForJournal,
-            onExerciseSelected = { viewModel.loadExerciseRecommendationForJournal(it) },
+            onExerciseSelected = { catalogName, historyHint ->
+                viewModel.loadExerciseRecommendationForJournal(catalogName, historyHint)
+            },
             onDismiss = {
                 showAddDialog = false
                 preselectedExerciseForAdd = null

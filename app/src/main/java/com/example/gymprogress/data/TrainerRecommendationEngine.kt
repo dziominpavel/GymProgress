@@ -6,6 +6,23 @@ import java.time.temporal.ChronoUnit
 
 class TrainerRecommendationEngine {
 
+    /** Записи по упражнению: имя из справочника + опционально точная строка из журнала (старые названия в БД). */
+    private fun entriesForExerciseNames(
+        history: List<WorkoutEntry>,
+        exercise: Exercise,
+        historyNameHint: String?
+    ): List<WorkoutEntry> {
+        val nameKeys = buildSet {
+            exercise.name.trim().takeIf { it.isNotEmpty() }?.let { add(it) }
+            historyNameHint?.trim()?.takeIf { it.isNotEmpty() }?.let { add(it) }
+        }
+        if (nameKeys.isEmpty()) return emptyList()
+        return history.filter { entry ->
+            val stored = entry.exerciseName.trim()
+            nameKeys.any { key -> stored == key }
+        }.sortedByDescending { it.date }
+    }
+
     fun generateRecommendation(
         settings: TrainerSettings,
         trainingGoal: TrainingGoal,
@@ -83,7 +100,8 @@ class TrainerRecommendationEngine {
         settings: TrainerSettings,
         bodyWeightKg: Double?,
         scoringEngine: ScoringEngine,
-        scoringSystem: ScoringSystem
+        scoringSystem: ScoringSystem,
+        historyNameHint: String? = null
     ): ExerciseRecommendation {
         val isDeload = shouldDeload(settings, history)
         return buildExerciseRec(
@@ -96,7 +114,8 @@ class TrainerRecommendationEngine {
             lastSessionDate = null,
             bodyWeightKg = bodyWeightKg,
             scoringEngine = scoringEngine,
-            scoringSystem = scoringSystem
+            scoringSystem = scoringSystem,
+            historyNameHint = historyNameHint
         )
     }
 
@@ -344,7 +363,8 @@ class TrainerRecommendationEngine {
         isDeload: Boolean,
         bodyWeightKg: Double?,
         scoringEngine: ScoringEngine,
-        scoringSystem: ScoringSystem
+        scoringSystem: ScoringSystem,
+        historyNameHint: String? = null
     ): List<ExerciseRecommendation> {
         val result = mutableListOf<ExerciseRecommendation>()
         val lastSessionNames = getLastSessionExercises(muscleGroups, exercises, history)
@@ -374,7 +394,8 @@ class TrainerRecommendationEngine {
                         lastSessionDate = lastSessionDate,
                         bodyWeightKg = bodyWeightKg,
                         scoringEngine = scoringEngine,
-                        scoringSystem = scoringSystem
+                        scoringSystem = scoringSystem,
+                        historyNameHint = historyNameHint
                     )
                 )
             }
@@ -457,11 +478,10 @@ class TrainerRecommendationEngine {
         lastSessionDate: String?,
         bodyWeightKg: Double?,
         scoringEngine: ScoringEngine,
-        scoringSystem: ScoringSystem
+        scoringSystem: ScoringSystem,
+        historyNameHint: String? = null
     ): ExerciseRecommendation {
-        val exerciseHistory = history
-            .filter { it.exerciseName == exercise.name }
-            .sortedByDescending { it.date }
+        val exerciseHistory = entriesForExerciseNames(history, exercise, historyNameHint)
 
         val isCompound = exercise.exerciseType == ExerciseType.COMPOUND.name
         val weightStep = if (isCompound) 2.5 else 1.25
@@ -613,7 +633,7 @@ class TrainerRecommendationEngine {
                 "Ориентир: ${FormatUtils.formatWeight(bestEntry.weight)} кг"
             }
         } else if (snapshot.isStagnating && snapshot.isStableInRange) {
-            "Если 2 тренировки без прогресса — откатите вес на 5% и вернитесь"
+            "Если 2 тренировки без прогресса — откатите немного вес и вернитесь"
         } else {
             "Сделайте чуть лучше прошлой: +1 повтор или +${FormatUtils.formatWeight(weightStep)} кг"
         }

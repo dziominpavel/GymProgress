@@ -81,6 +81,15 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.util.Locale
 
+/** Все строки exerciseName, по которым ищем историю (справочник + строка из записи при быстром «+»). */
+private fun exerciseHistoryNameKeys(
+    preselectedExercise: String?,
+    catalogExerciseName: String?
+): Set<String> = buildSet {
+    preselectedExercise?.trim()?.takeIf { it.isNotEmpty() }?.let { add(it) }
+    catalogExerciseName?.trim()?.takeIf { it.isNotEmpty() }?.let { add(it) }
+}
+
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun AddEntryDialog(
@@ -94,18 +103,14 @@ fun AddEntryDialog(
     onConfirm: (date: String, exerciseName: String, weight: Double, reps: String) -> Unit,
     preselectedExercise: String? = null,
     exerciseRecommendation: ExerciseRecommendation? = null,
-    onExerciseSelected: (String?) -> Unit = {}
+    onExerciseSelected: (catalogExerciseName: String?, historyNameHint: String?) -> Unit = { _, _ -> }
 ) {
     val today = LocalDate.now()
     var displayDate by remember { mutableStateOf(FormatUtils.formatDate(FormatUtils.toStorageDate(today))) }
     var storageDate by remember { mutableStateOf(FormatUtils.toStorageDate(today)) }
     var showDatePicker by remember { mutableStateOf(false) }
 
-    var selectedExercise by remember {
-        mutableStateOf(
-            preselectedExercise?.let { name -> exercises.find { it.name == name } }
-        )
-    }
+    var selectedExercise by remember { mutableStateOf<Exercise?>(null) }
     var exerciseDropdownExpanded by remember { mutableStateOf(false) }
     var expandedGroup by remember { mutableStateOf<String?>(null) }
 
@@ -118,8 +123,18 @@ fun AddEntryDialog(
     var bodyWeightError by remember { mutableStateOf(false) }
     var repsError by remember { mutableStateOf(false) }
 
-    LaunchedEffect(selectedExercise?.name) {
-        onExerciseSelected(selectedExercise?.name)
+    // Справочник может прийти после первого кадра; строка «+» из журнала = точный exerciseName в БД.
+    LaunchedEffect(preselectedExercise, exercises) {
+        if (preselectedExercise != null) {
+            val sought = preselectedExercise.trim()
+            val match = exercises.find { it.name.trim() == sought }
+                ?: exercises.find { it.name.trim().equals(sought, ignoreCase = true) }
+            if (match != null) selectedExercise = match
+        }
+    }
+
+    LaunchedEffect(selectedExercise?.name, preselectedExercise) {
+        onExerciseSelected(selectedExercise?.name, preselectedExercise)
     }
     LaunchedEffect(selectedExercise?.isBodyweight) {
         if (selectedExercise?.isBodyweight == true) {
@@ -133,11 +148,16 @@ fun AddEntryDialog(
             ExerciseType.entries.find { it.name == typeName }
         } ?: ExerciseType.COMPOUND
     }
+    val historyNameKeys = remember(preselectedExercise, selectedExercise?.name) {
+        exerciseHistoryNameKeys(preselectedExercise, selectedExercise?.name)
+    }
     // Список: сверху первые по дате (старые), консистентно по проекту
-    val exerciseHistory = remember(selectedExercise?.name, history) {
-        val name = selectedExercise?.name ?: return@remember emptyList()
-        history.filter { it.exerciseName == name }
-            .sortedWith(compareBy({ it.date }, { it.id }))
+    val exerciseHistory = remember(historyNameKeys, history) {
+        if (historyNameKeys.isEmpty()) return@remember emptyList()
+        history.filter { entry ->
+            val stored = entry.exerciseName.trim()
+            historyNameKeys.any { key -> stored == key.trim() }
+        }.sortedWith(compareBy({ it.date }, { it.id }))
     }
     val isBodyweightSelected = selectedExercise?.isBodyweight == true
     val bestEntry = remember(
@@ -237,7 +257,7 @@ fun AddEntryDialog(
                         onExpandedChange = { exerciseDropdownExpanded = it }
                     ) {
                         OutlinedTextField(
-                            value = selectedExercise?.name ?: "",
+                            value = selectedExercise?.name ?: preselectedExercise.orEmpty(),
                             onValueChange = {},
                             readOnly = true,
                             label = { Text("Упражнение") },
@@ -327,7 +347,7 @@ fun AddEntryDialog(
                         }
                     }
 
-                    if (selectedExercise != null) {
+                    if (historyNameKeys.isNotEmpty()) {
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()

@@ -415,8 +415,15 @@ class WorkoutViewModel(application: Application) : AndroidViewModel(application)
         return trainerEngine.getAlternatives(exercise, allExercises.value)
     }
 
-    /** Загружает рекомендацию по упражнению для отображения в диалоге добавления записи (совет тренера). */
-    fun loadExerciseRecommendationForJournal(exerciseName: String?) {
+    /**
+     * Рекомендация для диалога «Новая запись».
+     * @param exerciseName имя из справочника (после сопоставления)
+     * @param historyNameHint точная строка exerciseName из записи журнала (при «+» у прошлой тренировки)
+     */
+    fun loadExerciseRecommendationForJournal(
+        exerciseName: String?,
+        historyNameHint: String? = null
+    ) {
         viewModelScope.launch {
             if (exerciseName == null) {
                 _exerciseRecommendationForJournal.value = null
@@ -433,7 +440,8 @@ class WorkoutViewModel(application: Application) : AndroidViewModel(application)
                 settings = trainerSettings.value,
                 bodyWeightKg = bodyWeightKg.value,
                 scoringEngine = scoringEngine.value,
-                scoringSystem = scoringSystem.value
+                scoringSystem = scoringSystem.value,
+                historyNameHint = historyNameHint
             )
         }
     }
