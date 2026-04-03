@@ -52,6 +52,8 @@ import com.example.gymprogress.data.buildExerciseProgressChartPoints
 import com.example.gymprogress.ui.theme.Spacing
 import com.example.gymprogress.ui.theme.Volt
 import kotlin.math.abs
+import kotlin.math.ceil
+import kotlin.math.floor
 import kotlin.math.hypot
 import kotlin.math.max
 
@@ -61,13 +63,12 @@ private data class ChartLayout(
     val yAxisMax: Double,
 )
 
+private const val Y_AXIS_LABEL_STEP = 10.0
+
 /**
- * Диапазон оси Y подстраивается под данные: сами точки занимают ~80% высоты графика,
- * сверху и снизу по ~10% остаётся «воздух» (отступ = ⅛ размаха данных с каждой стороны).
+ * «Сырые» границы: точки занимают ~80% высоты, по 10% воздуха сверху и снизу (отступ = ⅛ размаха).
  */
-private fun chartYAxisRange(points: List<ExerciseProgressChartPoint>): Pair<Double, Double> {
-    val dataMin = points.minOf { it.yValue }
-    val dataMax = points.maxOf { it.yValue }
+private fun paddedRawYRange(dataMin: Double, dataMax: Double): Pair<Double, Double> {
     val range = dataMax - dataMin
     if (range < 1e-9) {
         val mid = dataMin
@@ -79,6 +80,23 @@ private fun chartYAxisRange(points: List<ExerciseProgressChartPoint>): Pair<Doub
     }
     val pad = range / 8.0
     return dataMin - pad to dataMax + pad
+}
+
+/**
+ * Границы оси для отрисовки и подписей: целые значения, шаг 10 (кг или баллы), все точки внутри,
+ * размах не меньше одного шага.
+ */
+private fun chartDisplayYAxisRange(points: List<ExerciseProgressChartPoint>): Pair<Double, Double> {
+    val dataMin = points.minOf { it.yValue }
+    val dataMax = points.maxOf { it.yValue }
+    val (rawMin, rawMax) = paddedRawYRange(dataMin, dataMax)
+    var yLo = floor(rawMin / Y_AXIS_LABEL_STEP) * Y_AXIS_LABEL_STEP
+    var yHi = ceil(rawMax / Y_AXIS_LABEL_STEP) * Y_AXIS_LABEL_STEP
+    if (yHi <= yLo) yHi = yLo + Y_AXIS_LABEL_STEP
+    while (yLo > dataMin) yLo -= Y_AXIS_LABEL_STEP
+    while (yHi < dataMax) yHi += Y_AXIS_LABEL_STEP
+    while (yHi - yLo < Y_AXIS_LABEL_STEP) yHi += Y_AXIS_LABEL_STEP
+    return yLo to yHi
 }
 
 private fun computeChartLayout(
@@ -239,7 +257,7 @@ fun ExerciseProgressChartScreen(
                     }
                 }
                 else -> {
-                    val (yAxisMin, yAxisMax) = remember(points) { chartYAxisRange(points) }
+                    val (yAxisMin, yAxisMax) = remember(points) { chartDisplayYAxisRange(points) }
                     val gridLineColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                     val dotInnerColor = MaterialTheme.colorScheme.surface
                     val labelColWidth = 56.dp
@@ -254,19 +272,13 @@ fun ExerciseProgressChartScreen(
                                 .fillMaxSize(),
                             verticalArrangement = Arrangement.SpaceBetween,
                         ) {
-                            val yMid = (yAxisMin + yAxisMax) / 2.0
                             Text(
-                                text = FormatUtils.formatTwoDecimals(yAxisMax),
+                                text = yAxisMax.toInt().toString(),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                             Text(
-                                text = FormatUtils.formatTwoDecimals(yMid),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            Text(
-                                text = FormatUtils.formatTwoDecimals(yAxisMin),
+                                text = yAxisMin.toInt().toString(),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )

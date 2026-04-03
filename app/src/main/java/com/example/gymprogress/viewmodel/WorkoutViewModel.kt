@@ -237,7 +237,12 @@ class WorkoutViewModel(application: Application) : AndroidViewModel(application)
 
     val entriesForSelectedExercise: StateFlow<List<WorkoutEntry>> = _selectedExercise
         .flatMapLatest { name ->
-            if (name != null) workoutDao.getEntriesByExercise(name) else flowOf(emptyList())
+            if (name != null) {
+                allEntries.map { allEntries ->
+                    FormatUtils.workoutEntriesMatchingCatalogName(allEntries, name)
+                        .sortedWith(compareBy({ it.date }, { it.id }))
+                }
+            } else flowOf(emptyList())
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 

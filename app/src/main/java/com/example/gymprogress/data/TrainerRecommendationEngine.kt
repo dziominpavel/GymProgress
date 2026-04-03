@@ -6,16 +6,15 @@ import kotlin.math.roundToLong
 
 class TrainerRecommendationEngine {
 
-    /** Записи по упражнению: то же сопоставление имён, что в журнале и на Прогрессе. */
+    /** Записи по упражнению: как Room getEntriesByExercise(exercise.name) + trim/normalize. */
     private fun entriesForExerciseNames(
         history: List<WorkoutEntry>,
         exercise: Exercise,
-        historyNameHint: String?,
-        allExercises: List<Exercise>
+        @Suppress("UNUSED_PARAMETER") historyNameHint: String?,
+        @Suppress("UNUSED_PARAMETER") allExercises: List<Exercise>
     ): List<WorkoutEntry> {
-        return history.filter { entry ->
-            FormatUtils.workoutEntryMatchesExercise(entry, exercise, allExercises, historyNameHint)
-        }.sortedByDescending { it.date }
+        return FormatUtils.workoutEntriesMatchingCatalogName(history, exercise.name)
+            .sortedByDescending { it.date }
     }
 
     fun generateRecommendation(

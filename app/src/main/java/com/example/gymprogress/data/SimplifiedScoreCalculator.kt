@@ -1,5 +1,6 @@
 package com.example.gymprogress.data
 
+import com.example.gymprogress.data.SimplifiedScoreCalculator.calcE1RMForEntry
 import kotlin.math.abs
 import kotlin.math.max
 
@@ -115,6 +116,30 @@ object SimplifiedScoreCalculator : ScoringEngine {
             val positionFromEnd = reps.size - 1 - index
             adjustedE1RM(effectiveWeight, rep, positionFromEnd, profile)
         }.maxOrNull() ?: 0.0
+    }
+
+    /**
+     * Сессия с наибольшим оценочным 1RM (тот же расчёт, что [calcE1RMForEntry]).
+     * При равном 1RM: более поздняя дата ([WorkoutEntry.date] в формате yyyy-MM-dd),
+     * при той же дате — больший [WorkoutEntry.id] (позже введённая запись).
+     *
+     * Важно: для [Iterable.maxWithOrNull] нужен порядок «возрастания ценности» —
+     * [compareBy] по e1RM (и дате, и id), а не [compareByDescending]: иначе Kotlin
+     * выбирает элемент с **минимальным** 1RM.
+     */
+    fun bestEntryByEstimatedE1RM(
+        entries: List<WorkoutEntry>,
+        bodyWeightKg: Double? = null,
+        isBodyweightExercise: Boolean = false,
+        profile: EffortProfile = STANDARD_EFFORT
+    ): WorkoutEntry? {
+        if (entries.isEmpty()) return null
+        return entries.maxWithOrNull(
+            compareBy<WorkoutEntry> { e ->
+                calcE1RMForEntry(e, bodyWeightKg, isBodyweightExercise, profile)
+            }.thenBy { it.date }
+                .thenBy { it.id }
+        )
     }
 
     private fun effectiveWeight(

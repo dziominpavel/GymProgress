@@ -69,6 +69,7 @@ import com.example.gymprogress.data.FormatUtils
 import com.example.gymprogress.data.MuscleGroup
 import com.example.gymprogress.data.ScoringEngine
 import com.example.gymprogress.data.ScoringSystem
+import com.example.gymprogress.data.SimplifiedScoreCalculator
 import com.example.gymprogress.data.TrainingGoal
 import com.example.gymprogress.data.WorkoutEntry
 import com.example.gymprogress.data.selectBestSessionEntry
@@ -140,32 +141,26 @@ fun AddEntryDialog(
         } ?: ExerciseType.COMPOUND
     }
     val showBestWorkoutSection = selectedExercise != null || !preselectedExercise.isNullOrBlank()
-    // Список: сверху первые по дате (старые); сопоставление имён как в Прогрессе (нормализация + id из справочника)
-    val exerciseHistory = remember(selectedExercise, preselectedExercise, history, exercises) {
+    // Тот же набор записей, что на «Прогресс» → getEntriesByExercise(имя из справочника)
+    val exerciseHistory = remember(selectedExercise, preselectedExercise, history) {
         when {
             selectedExercise != null -> {
-                val sel = checkNotNull(selectedExercise)
-                history.filter { entry ->
-                    FormatUtils.workoutEntryMatchesExercise(
-                        entry,
-                        sel,
-                        exercises,
-                        preselectedExercise
-                    )
-                }.sortedWith(compareBy({ it.date }, { it.id }))
+                val exercise = selectedExercise
+                FormatUtils.workoutEntriesMatchingCatalogName(
+                    history,
+                    checkNotNull(exercise).name
+                ).sortedWith(compareBy({ it.date }, { it.id }))
             }
             else -> {
                 val p = preselectedExercise?.trim()?.takeIf { it.isNotEmpty() }
                     ?: return@remember emptyList()
-                val k = FormatUtils.normalizeExerciseNameKey(p)
-                history.filter {
-                    FormatUtils.normalizeExerciseNameKey(it.exerciseName) == k ||
-                        it.exerciseName.trim() == p
-                }.sortedWith(compareBy({ it.date }, { it.id }))
+                FormatUtils.workoutEntriesMatchingCatalogName(history, p)
+                    .sortedWith(compareBy({ it.date }, { it.id }))
             }
         }
     }
     val isBodyweightSelected = selectedExercise?.isBodyweight == true
+    // Упрощённая система: лучшая сессия по оценочному 1RM — [SimplifiedScoreCalculator.bestEntryByEstimatedE1RM]
     val bestEntry = remember(
         exerciseHistory,
         trainingGoal,
@@ -175,15 +170,23 @@ fun AddEntryDialog(
         bodyWeightKg,
         isBodyweightSelected
     ) {
-        selectBestSessionEntry(
-            exerciseHistory,
-            scoringEngine,
-            scoringSystem,
-            trainingGoal,
-            selectedExerciseType,
-            bodyWeightKg,
-            isBodyweightSelected
-        )
+        if (exerciseHistory.isEmpty()) null
+        else when (scoringSystem) {
+            ScoringSystem.SIMPLIFIED -> SimplifiedScoreCalculator.bestEntryByEstimatedE1RM(
+                exerciseHistory,
+                bodyWeightKg,
+                isBodyweightSelected
+            )
+            ScoringSystem.ADVANCED -> selectBestSessionEntry(
+                exerciseHistory,
+                scoringEngine,
+                scoringSystem,
+                trainingGoal,
+                selectedExerciseType,
+                bodyWeightKg,
+                isBodyweightSelected
+            )
+        }
     }
     val bestReps = remember(bestEntry?.reps) {
         bestEntry?.reps?.split(",")

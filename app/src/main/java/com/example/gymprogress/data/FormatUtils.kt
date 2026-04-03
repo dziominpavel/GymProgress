@@ -1,5 +1,6 @@
 package com.example.gymprogress.data
 
+import com.example.gymprogress.data.FormatUtils.normalizeExerciseNameKey
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -64,6 +65,24 @@ object FormatUtils {
             .replace('\u00A0', ' ')
             .replace(Regex("\\s+"), " ")
             .lowercase(Locale.ROOT)
+
+    /**
+     * Записи по имени упражнения так же, как в Room `getEntriesByExercise(name)`,
+     * плюс допуск trim и [normalizeExerciseNameKey] (неразрывный пробел и т.п.).
+     * На вкладке «Прогресс» список строится из этого же запроса — журнал не должен отличаться.
+     */
+    fun workoutEntriesMatchingCatalogName(
+        history: List<WorkoutEntry>,
+        catalogExerciseName: String
+    ): List<WorkoutEntry> {
+        val cn = catalogExerciseName.trim()
+        val cnKey = normalizeExerciseNameKey(catalogExerciseName)
+        return history.filter { e ->
+            e.exerciseName == catalogExerciseName ||
+                e.exerciseName.trim() == cn ||
+                normalizeExerciseNameKey(e.exerciseName) == cnKey
+        }
+    }
 
     /** Находит упражнение в справочнике по строке из записи журнала. */
     fun findExerciseByStoredName(exercises: List<Exercise>, storedExerciseName: String): Exercise? {
