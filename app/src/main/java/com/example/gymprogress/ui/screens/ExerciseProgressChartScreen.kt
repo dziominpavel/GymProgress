@@ -41,8 +41,8 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.example.gymprogress.data.ExerciseType
 import com.example.gymprogress.data.ExerciseProgressChartPoint
+import com.example.gymprogress.data.ExerciseType
 import com.example.gymprogress.data.FormatUtils
 import com.example.gymprogress.data.ScoringEngine
 import com.example.gymprogress.data.ScoringSystem
@@ -51,13 +51,21 @@ import com.example.gymprogress.data.WorkoutEntry
 import com.example.gymprogress.data.buildExerciseProgressChartPoints
 import com.example.gymprogress.ui.theme.Spacing
 import com.example.gymprogress.ui.theme.Volt
+import kotlin.math.ceil
 import kotlin.math.hypot
 
 private data class ChartLayout(
     val nodeOffsets: List<Pair<Offset, ExerciseProgressChartPoint>>,
-    val yMin: Double,
-    val yMax: Double,
+    val yAxisMin: Double,
+    val yAxisMax: Double,
 )
+
+/** Нижняя граница оси Y — 0, верхняя — ближайшее к данным значение, кратное 50 (50, 100, 150, …). */
+private fun chartYAxisMax(points: List<ExerciseProgressChartPoint>): Double {
+    val dataMax = points.maxOf { it.yValue }
+    val step = 50.0
+    return (ceil(dataMax / step) * step).coerceAtLeast(step)
+}
 
 private fun computeChartLayout(
     data: List<ExerciseProgressChartPoint>,
@@ -67,27 +75,23 @@ private fun computeChartLayout(
     paddingEnd: Float,
     paddingTop: Float,
     paddingBottom: Float,
+    yAxisMin: Double,
+    yAxisMax: Double,
 ): ChartLayout {
     if (data.isEmpty() || width <= 0f || height <= 0f) {
-        return ChartLayout(emptyList(), 0.0, 1.0)
+        return ChartLayout(emptyList(), yAxisMin, yAxisMax)
     }
-    val ys = data.map { it.yValue }
-    var yMin = ys.minOrNull() ?: 0.0
-    var yMax = ys.maxOrNull() ?: 1.0
-    if (kotlin.math.abs(yMax - yMin) < 1e-9) {
-        yMin -= 1.0
-        yMax += 1.0
-    }
+    val span = (yAxisMax - yAxisMin).coerceAtLeast(1e-9)
     val innerW = (width - paddingStart - paddingEnd).coerceAtLeast(1f)
     val innerH = (height - paddingTop - paddingBottom).coerceAtLeast(1f)
     val n = data.size
     val nodeOffsets = data.mapIndexed { i, p ->
         val x = paddingStart + innerW * if (n == 1) 0.5f else i.toFloat() / (n - 1)
-        val t = ((p.yValue - yMin) / (yMax - yMin)).toFloat().coerceIn(0f, 1f)
+        val t = ((p.yValue - yAxisMin) / span).toFloat().coerceIn(0f, 1f)
         val y = paddingTop + innerH * (1f - t)
         Offset(x, y) to p
     }
-    return ChartLayout(nodeOffsets, yMin, yMax)
+    return ChartLayout(nodeOffsets, yAxisMin, yAxisMax)
 }
 
 @Composable
@@ -221,9 +225,11 @@ fun ExerciseProgressChartScreen(
                     }
                 }
                 else -> {
+                    val yAxisMin = 0.0
+                    val yAxisMax = remember(points) { chartYAxisMax(points) }
                     val gridLineColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                     val dotInnerColor = MaterialTheme.colorScheme.surface
-                    val labelColWidth = 44.dp
+                    val labelColWidth = 56.dp
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -235,21 +241,19 @@ fun ExerciseProgressChartScreen(
                                 .fillMaxSize(),
                             verticalArrangement = Arrangement.SpaceBetween,
                         ) {
-                            val yMax = points.maxOf { it.yValue }
-                            val yMin = points.minOf { it.yValue }
-                            val yMid = (yMax + yMin) / 2.0
+                            val yMid = (yAxisMin + yAxisMax) / 2.0
                             Text(
-                                text = formatYAxisTick(yMax, isSimplified),
+                                text = FormatUtils.formatTwoDecimals(yAxisMax),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                             Text(
-                                text = formatYAxisTick(yMid, isSimplified),
+                                text = FormatUtils.formatTwoDecimals(yMid),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                             Text(
-                                text = formatYAxisTick(yMin, isSimplified),
+                                text = FormatUtils.formatTwoDecimals(yAxisMin),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -267,7 +271,7 @@ fun ExerciseProgressChartScreen(
                             Canvas(
                                 modifier = Modifier
                                     .fillMaxSize()
-                                    .pointerInput(points, hitRadiusPx) {
+                                    .pointerInput(points, yAxisMax, hitRadiusPx) {
                                         detectTapGestures { offset ->
                                             val w = size.width.toFloat()
                                             val h = size.height.toFloat()
@@ -279,6 +283,8 @@ fun ExerciseProgressChartScreen(
                                                 paddingEnd,
                                                 paddingTop,
                                                 paddingBottom,
+                                                yAxisMin,
+                                                yAxisMax,
                                             )
                                             val nearest = layout.nodeOffsets.minByOrNull { (o, _) ->
                                                 hypot(
@@ -306,6 +312,8 @@ fun ExerciseProgressChartScreen(
                                     paddingEnd,
                                     paddingTop,
                                     paddingBottom,
+                                    yAxisMin,
+                                    yAxisMax,
                                 )
                                 drawLine(
                                     gridLineColor,
@@ -394,9 +402,9 @@ fun ExerciseProgressChartScreen(
             text = {
                 Text(
                     text = if (isSimplified) {
-                        "Оценочный 1RM: ${FormatUtils.formatWeight(p.yValue)} кг"
+                        "Оценочный 1RM: ${FormatUtils.formatTwoDecimals(p.yValue)} кг"
                     } else {
-                        "Оценка: ${p.yValue.toInt()}"
+                        "Оценка: ${FormatUtils.formatTwoDecimals(p.yValue)}"
                     },
                 )
             },
@@ -406,13 +414,5 @@ fun ExerciseProgressChartScreen(
                 }
             },
         )
-    }
-}
-
-private fun formatYAxisTick(value: Double, isSimplified: Boolean): String {
-    return if (isSimplified) {
-        FormatUtils.formatWeightPrecise(value)
-    } else {
-        value.toInt().toString()
     }
 }

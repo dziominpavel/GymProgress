@@ -30,6 +30,10 @@ object FormatUtils {
         return if (v == v.toLong().toDouble()) v.toLong().toString() else String.format(java.util.Locale.US, "%.0f", v)
     }
 
+    /** Округление для отображения на графиках и в диалогах (два знака после запятой). */
+    fun formatTwoDecimals(value: Double): String =
+        String.format(java.util.Locale.US, "%.2f", value)
+
     fun formatRest(seconds: Int): String {
         return if (seconds >= 60) {
             val min = seconds / 60
