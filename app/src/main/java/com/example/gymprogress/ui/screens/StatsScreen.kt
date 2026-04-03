@@ -28,6 +28,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuAnchorType
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -67,6 +68,7 @@ fun StatsScreen(
     entriesForExercise: List<WorkoutEntry>,
     allEntries: List<WorkoutEntry> = emptyList(),
     onExerciseSelected: (String?) -> Unit,
+    onOpenProgressChart: () -> Unit = {},
     modifier: Modifier = Modifier,
     trainingGoal: TrainingGoal = TrainingGoal.HYPERTROPHY,
     exerciseType: ExerciseType = ExerciseType.COMPOUND,
@@ -346,6 +348,18 @@ fun StatsScreen(
                         title = if (isSimplified) "Система" else "Цель",
                         value = if (isSimplified) "1RM" else trainingGoal.displayName,
                         modifier = Modifier.weight(1f)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(Spacing.sm))
+                OutlinedButton(
+                    onClick = onOpenProgressChart,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = TextFieldShape,
+                ) {
+                    Text(
+                        text = "График",
+                        fontWeight = FontWeight.Bold,
                     )
                 }
 

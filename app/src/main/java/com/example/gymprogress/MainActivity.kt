@@ -37,6 +37,7 @@ import com.example.gymprogress.data.CompletedSet
 import com.example.gymprogress.ui.screens.ActiveWorkoutScreen
 import com.example.gymprogress.ui.screens.TrainerScreen
 import com.example.gymprogress.ui.screens.TrainerSettingsScreen
+import com.example.gymprogress.ui.screens.ExerciseProgressChartScreen
 import com.example.gymprogress.ui.screens.WorkoutHistoryScreen
 import com.example.gymprogress.data.WorkoutRecommendation
 import com.example.gymprogress.data.ScoringEngine
@@ -71,6 +72,7 @@ fun GymProgressApp(viewModel: WorkoutViewModel = viewModel()) {
     var openedSettingsFromTrainer by rememberSaveable { mutableStateOf(false) }
     var showActiveWorkout by rememberSaveable { mutableStateOf(false) }
     var showWorkoutHistory by rememberSaveable { mutableStateOf(false) }
+    var showProgressChart by rememberSaveable { mutableStateOf(false) }
     var activeWorkoutRec by remember { mutableStateOf<WorkoutRecommendation?>(null) }
     var preselectedExerciseForAdd by rememberSaveable { mutableStateOf<String?>(null) }
 
@@ -110,6 +112,12 @@ fun GymProgressApp(viewModel: WorkoutViewModel = viewModel()) {
         }
     }
 
+    LaunchedEffect(selectedExercise, showProgressChart) {
+        if (showProgressChart && selectedExercise == null) {
+            showProgressChart = false
+        }
+    }
+
     // Resolve active workout state before branching
     if (showActiveWorkout && activeWorkoutRec == null && workoutRecommendation != null) {
         activeWorkoutRec = workoutRecommendation
@@ -119,6 +127,28 @@ fun GymProgressApp(viewModel: WorkoutViewModel = viewModel()) {
     }
 
     // Full-screen overlays: early returns are safe here (composable body, not a lambda)
+    if (showProgressChart) {
+        BackHandler { showProgressChart = false }
+        val chartExercise = selectedExercise
+        if (chartExercise != null) {
+            val chartExerciseMeta = allExercises.find { it.name == chartExercise }
+            ExerciseProgressChartScreen(
+                exerciseName = chartExercise,
+                entries = entriesForExercise,
+                scoringEngine = scoringEngine,
+                scoringSystem = scoringSystem,
+                trainingGoal = trainingGoal,
+                exerciseType = selectedExerciseType,
+                bodyWeightKg = bodyWeightKg,
+                isBodyweightExercise = chartExerciseMeta?.isBodyweight == true,
+                isAnthropometryIncompleteForBw = !isAnthropometryComplete,
+                onBack = { showProgressChart = false },
+                modifier = Modifier.fillMaxSize()
+            )
+        }
+        return
+    }
+
     if (showWorkoutHistory) {
         BackHandler { showWorkoutHistory = false }
         WorkoutHistoryScreen(
@@ -280,6 +310,7 @@ fun GymProgressApp(viewModel: WorkoutViewModel = viewModel()) {
                     entriesForExercise = entriesForExercise,
                     allEntries = entries,
                     onExerciseSelected = { viewModel.selectExercise(it) },
+                    onOpenProgressChart = { showProgressChart = true },
                     trainingGoal = trainingGoal,
                     exerciseType = selectedExerciseType,
                     scoringEngine = scoringEngine,
