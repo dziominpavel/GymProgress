@@ -3,21 +3,21 @@ package com.example.gymprogress.ui.screens
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.relocation.BringIntoViewRequester
-import androidx.compose.foundation.relocation.bringIntoViewRequester
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DropdownMenuItem
@@ -38,27 +39,24 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuAnchorType
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.focus.onFocusEvent
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -76,18 +74,25 @@ import com.example.gymprogress.data.WorkoutEntry
 import com.example.gymprogress.data.selectBestSessionEntry
 import com.example.gymprogress.ui.theme.Spacing
 import com.example.gymprogress.ui.theme.Volt
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.util.Locale
 
-/** Все строки exerciseName, по которым ищем историю (справочник + строка из записи при быстром «+»). */
-private fun exerciseHistoryNameKeys(
+/**
+ * Имя для фильтра истории: только **текущее** выбранное упражнение.
+ * Нельзя объединять preselected (с «+») с именем из списка — preselected не сбрасывается при смене
+ * упражнения вручную, и тогда в пул попадали бы записи разных упражнений и «лучшая» была бы одна на всех.
+ */
+private fun exerciseHistoryFilterName(
     preselectedExercise: String?,
-    catalogExerciseName: String?
-): Set<String> = buildSet {
-    preselectedExercise?.trim()?.takeIf { it.isNotEmpty() }?.let { add(it) }
-    catalogExerciseName?.trim()?.takeIf { it.isNotEmpty() }?.let { add(it) }
+    selectedExercise: Exercise?
+): String? {
+    val catalog = selectedExercise?.name?.trim()?.takeIf { it.isNotEmpty() }
+    if (catalog != null) return catalog
+    return preselectedExercise?.trim()?.takeIf { it.isNotEmpty() }
 }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
@@ -134,7 +139,10 @@ fun AddEntryDialog(
     }
 
     LaunchedEffect(selectedExercise?.name, preselectedExercise) {
-        onExerciseSelected(selectedExercise?.name, preselectedExercise)
+        val hint = preselectedExercise?.takeIf { p ->
+            selectedExercise?.name?.trim() == p.trim()
+        }
+        onExerciseSelected(selectedExercise?.name, hint)
     }
     LaunchedEffect(selectedExercise?.isBodyweight) {
         if (selectedExercise?.isBodyweight == true) {
@@ -148,16 +156,14 @@ fun AddEntryDialog(
             ExerciseType.entries.find { it.name == typeName }
         } ?: ExerciseType.COMPOUND
     }
-    val historyNameKeys = remember(preselectedExercise, selectedExercise?.name) {
-        exerciseHistoryNameKeys(preselectedExercise, selectedExercise?.name)
+    val historyFilterName = remember(preselectedExercise, selectedExercise?.name) {
+        exerciseHistoryFilterName(preselectedExercise, selectedExercise)
     }
     // Список: сверху первые по дате (старые), консистентно по проекту
-    val exerciseHistory = remember(historyNameKeys, history) {
-        if (historyNameKeys.isEmpty()) return@remember emptyList()
-        history.filter { entry ->
-            val stored = entry.exerciseName.trim()
-            historyNameKeys.any { key -> stored == key.trim() }
-        }.sortedWith(compareBy({ it.date }, { it.id }))
+    val exerciseHistory = remember(historyFilterName, history) {
+        val name = historyFilterName ?: return@remember emptyList()
+        history.filter { entry -> entry.exerciseName.trim() == name }
+            .sortedWith(compareBy({ it.date }, { it.id }))
     }
     val isBodyweightSelected = selectedExercise?.isBodyweight == true
     val bestEntry = remember(
@@ -347,7 +353,7 @@ fun AddEntryDialog(
                         }
                     }
 
-                    if (historyNameKeys.isNotEmpty()) {
+                    if (historyFilterName != null) {
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
