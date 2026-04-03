@@ -261,15 +261,15 @@ object SimplifiedScoreCalculator : ScoringEngine {
 
         when {
             abs(weightDelta) > 0.01 && abs(deltaPercent) >= 1.0 ->
-                reasons += "1RM: ${FormatUtils.formatWeight(curE1RM)} кг ${if (deltaPercent > 0) "↑" else "↓"}"
+                reasons += "1RM: ${FormatUtils.formatTwoDecimals(curE1RM)} кг ${if (deltaPercent > 0) "↑" else "↓"}"
             abs(deltaPercent) >= 1.0 ->
                 reasons += "1RM ${if (deltaPercent > 0) "↑" else "↓"}"
             else ->
                 reasons += "1RM стабилен"
         }
 
-        if (weightDelta > 0.01) reasons += "+${FormatUtils.formatWeight(weightDelta)} кг"
-        else if (weightDelta < -0.01) reasons += "${FormatUtils.formatWeight(weightDelta)} кг"
+        if (weightDelta > 0.01) reasons += "+${FormatUtils.formatTwoDecimals(weightDelta)} кг"
+        else if (weightDelta < -0.01) reasons += "${FormatUtils.formatTwoDecimals(weightDelta)} кг"
 
         val prevScore = calcSessionScore(previous, history, goal, exerciseType, bodyWeightKg, isBodyweightExercise)
         val baselineComponents = ScoreComponents(

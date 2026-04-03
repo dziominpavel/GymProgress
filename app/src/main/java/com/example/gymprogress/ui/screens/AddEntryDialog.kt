@@ -81,20 +81,6 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.util.Locale
 
-/**
- * Имя для фильтра истории: только **текущее** выбранное упражнение.
- * Нельзя объединять preselected (с «+») с именем из списка — preselected не сбрасывается при смене
- * упражнения вручную, и тогда в пул попадали бы записи разных упражнений и «лучшая» была бы одна на всех.
- */
-private fun exerciseHistoryFilterName(
-    preselectedExercise: String?,
-    selectedExercise: Exercise?
-): String? {
-    val catalog = selectedExercise?.name?.trim()?.takeIf { it.isNotEmpty() }
-    if (catalog != null) return catalog
-    return preselectedExercise?.trim()?.takeIf { it.isNotEmpty() }
-}
-
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun AddEntryDialog(
@@ -139,10 +125,7 @@ fun AddEntryDialog(
     }
 
     LaunchedEffect(selectedExercise?.name, preselectedExercise) {
-        val hint = preselectedExercise?.takeIf { p ->
-            selectedExercise?.name?.trim() == p.trim()
-        }
-        onExerciseSelected(selectedExercise?.name, hint)
+        onExerciseSelected(selectedExercise?.name, preselectedExercise)
     }
     LaunchedEffect(selectedExercise?.isBodyweight) {
         if (selectedExercise?.isBodyweight == true) {
@@ -156,14 +139,31 @@ fun AddEntryDialog(
             ExerciseType.entries.find { it.name == typeName }
         } ?: ExerciseType.COMPOUND
     }
-    val historyFilterName = remember(preselectedExercise, selectedExercise?.name) {
-        exerciseHistoryFilterName(preselectedExercise, selectedExercise)
-    }
-    // Список: сверху первые по дате (старые), консистентно по проекту
-    val exerciseHistory = remember(historyFilterName, history) {
-        val name = historyFilterName ?: return@remember emptyList()
-        history.filter { entry -> entry.exerciseName.trim() == name }
-            .sortedWith(compareBy({ it.date }, { it.id }))
+    val showBestWorkoutSection = selectedExercise != null || !preselectedExercise.isNullOrBlank()
+    // Список: сверху первые по дате (старые); сопоставление имён как в Прогрессе (нормализация + id из справочника)
+    val exerciseHistory = remember(selectedExercise, preselectedExercise, history, exercises) {
+        when {
+            selectedExercise != null -> {
+                val sel = checkNotNull(selectedExercise)
+                history.filter { entry ->
+                    FormatUtils.workoutEntryMatchesExercise(
+                        entry,
+                        sel,
+                        exercises,
+                        preselectedExercise
+                    )
+                }.sortedWith(compareBy({ it.date }, { it.id }))
+            }
+            else -> {
+                val p = preselectedExercise?.trim()?.takeIf { it.isNotEmpty() }
+                    ?: return@remember emptyList()
+                val k = FormatUtils.normalizeExerciseNameKey(p)
+                history.filter {
+                    FormatUtils.normalizeExerciseNameKey(it.exerciseName) == k ||
+                        it.exerciseName.trim() == p
+                }.sortedWith(compareBy({ it.date }, { it.id }))
+            }
+        }
     }
     val isBodyweightSelected = selectedExercise?.isBodyweight == true
     val bestEntry = remember(
@@ -353,7 +353,7 @@ fun AddEntryDialog(
                         }
                     }
 
-                    if (historyFilterName != null) {
+                    if (showBestWorkoutSection) {
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()

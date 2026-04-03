@@ -51,8 +51,9 @@ import com.example.gymprogress.data.WorkoutEntry
 import com.example.gymprogress.data.buildExerciseProgressChartPoints
 import com.example.gymprogress.ui.theme.Spacing
 import com.example.gymprogress.ui.theme.Volt
-import kotlin.math.ceil
+import kotlin.math.abs
 import kotlin.math.hypot
+import kotlin.math.max
 
 private data class ChartLayout(
     val nodeOffsets: List<Pair<Offset, ExerciseProgressChartPoint>>,
@@ -60,11 +61,24 @@ private data class ChartLayout(
     val yAxisMax: Double,
 )
 
-/** Нижняя граница оси Y — 0, верхняя — ближайшее к данным значение, кратное 50 (50, 100, 150, …). */
-private fun chartYAxisMax(points: List<ExerciseProgressChartPoint>): Double {
+/**
+ * Диапазон оси Y подстраивается под данные: сами точки занимают ~80% высоты графика,
+ * сверху и снизу по ~10% остаётся «воздух» (отступ = ⅛ размаха данных с каждой стороны).
+ */
+private fun chartYAxisRange(points: List<ExerciseProgressChartPoint>): Pair<Double, Double> {
+    val dataMin = points.minOf { it.yValue }
     val dataMax = points.maxOf { it.yValue }
-    val step = 50.0
-    return (ceil(dataMax / step) * step).coerceAtLeast(step)
+    val range = dataMax - dataMin
+    if (range < 1e-9) {
+        val mid = dataMin
+        val pad = when {
+            abs(mid) < 1e-9 -> 1.0
+            else -> max(abs(mid) * 0.05, 1e-6)
+        }.coerceAtLeast(0.5)
+        return mid - pad to mid + pad
+    }
+    val pad = range / 8.0
+    return dataMin - pad to dataMax + pad
 }
 
 private fun computeChartLayout(
@@ -178,9 +192,9 @@ fun ExerciseProgressChartScreen(
             )
             Text(
                 text = if (isSimplified) {
-                    "Ось Y: оценочный 1RM (кг). Ось X: номер тренировки."
+                    "Ось Y: оценочный 1RM (кг), масштаб по данным. Ось X: номер тренировки."
                 } else {
-                    "Ось Y: оценка. Ось X: номер тренировки."
+                    "Ось Y: оценка, масштаб по данным. Ось X: номер тренировки."
                 },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -225,8 +239,7 @@ fun ExerciseProgressChartScreen(
                     }
                 }
                 else -> {
-                    val yAxisMin = 0.0
-                    val yAxisMax = remember(points) { chartYAxisMax(points) }
+                    val (yAxisMin, yAxisMax) = remember(points) { chartYAxisRange(points) }
                     val gridLineColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                     val dotInnerColor = MaterialTheme.colorScheme.surface
                     val labelColWidth = 56.dp
@@ -271,7 +284,7 @@ fun ExerciseProgressChartScreen(
                             Canvas(
                                 modifier = Modifier
                                     .fillMaxSize()
-                                    .pointerInput(points, yAxisMax, hitRadiusPx) {
+                                    .pointerInput(points, yAxisMin, yAxisMax, hitRadiusPx) {
                                         detectTapGestures { offset ->
                                             val w = size.width.toFloat()
                                             val h = size.height.toFloat()

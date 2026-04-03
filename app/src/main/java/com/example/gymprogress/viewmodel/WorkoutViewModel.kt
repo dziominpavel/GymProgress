@@ -4,25 +4,24 @@ import android.app.Application
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.gymprogress.data.AiService
 import com.example.gymprogress.data.AppDatabase
 import com.example.gymprogress.data.CompletedSet
 import com.example.gymprogress.data.Exercise
+import com.example.gymprogress.data.ExerciseRecommendation
 import com.example.gymprogress.data.ExerciseType
 import com.example.gymprogress.data.FormatUtils
-import com.example.gymprogress.data.AiService
+import com.example.gymprogress.data.Gender
+import com.example.gymprogress.data.ScoringEngine
+import com.example.gymprogress.data.ScoringSystem
 import com.example.gymprogress.data.SetType
 import com.example.gymprogress.data.SettingsRepository
+import com.example.gymprogress.data.SimplifiedScoreCalculator
 import com.example.gymprogress.data.TrainerRecommendationEngine
 import com.example.gymprogress.data.TrainerSettings
 import com.example.gymprogress.data.TrainingGoal
 import com.example.gymprogress.data.WorkoutEntry
 import com.example.gymprogress.data.WorkoutRecommendation
-import com.example.gymprogress.data.ExerciseRecommendation
-import com.example.gymprogress.data.Gender
-import com.example.gymprogress.data.PreviousSessionInSplit
-import com.example.gymprogress.data.ScoringEngine
-import com.example.gymprogress.data.ScoringSystem
-import com.example.gymprogress.data.SimplifiedScoreCalculator
 import com.example.gymprogress.data.WorkoutScoreCalculator
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -436,6 +435,7 @@ class WorkoutViewModel(application: Application) : AndroidViewModel(application)
             _exerciseRecommendationForJournal.value = trainerEngine.getRecommendationForExercise(
                 exercise = exercise,
                 history = allEntries.value,
+                allExercises = allExercises.value,
                 trainingGoal = trainingGoal.value,
                 settings = trainerSettings.value,
                 bodyWeightKg = bodyWeightKg.value,

@@ -330,7 +330,7 @@ fun StatsScreen(
                         StatCard(
                             emoji = "\uD83D\uDCAA",
                             title = "Оценочный 1RM",
-                            value = "${FormatUtils.formatWeight(bestE1RM)} кг",
+                            value = "${FormatUtils.formatTwoDecimals(bestE1RM)} кг",
                             isHighlight = true,
                             modifier = Modifier.weight(1f)
                         )
@@ -338,7 +338,7 @@ fun StatsScreen(
                         StatCard(
                             emoji = "\uD83C\uDFC6",
                             title = "Макс. вес",
-                            value = "${FormatUtils.formatWeight(maxWeight)} кг",
+                            value = "${FormatUtils.formatTwoDecimals(maxWeight)} кг",
                             isHighlight = true,
                             modifier = Modifier.weight(1f)
                         )

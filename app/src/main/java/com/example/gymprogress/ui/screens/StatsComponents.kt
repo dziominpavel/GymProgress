@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -40,8 +39,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -52,10 +51,10 @@ import com.example.gymprogress.data.ExerciseDayScore
 import com.example.gymprogress.data.FormatUtils
 import com.example.gymprogress.data.MuscleGroup
 import com.example.gymprogress.data.ProgressStatus
+import com.example.gymprogress.data.ScoringEngine
 import com.example.gymprogress.data.TrainingGoal
 import com.example.gymprogress.data.WorkoutDayReport
 import com.example.gymprogress.data.WorkoutEntry
-import com.example.gymprogress.data.ScoringEngine
 import com.example.gymprogress.data.WorkoutScoreCalculator
 import com.example.gymprogress.ui.theme.CardShape
 import com.example.gymprogress.ui.theme.CardShapeSmall
@@ -181,7 +180,7 @@ internal fun HistoryRow(
                         .padding(horizontal = Spacing.xs, vertical = Spacing.xxs)
                 ) {
                     Text(
-                        text = "${entry.weight} кг",
+                        text = "${FormatUtils.formatTwoDecimals(entry.weight)} кг",
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.Bold,
                         color = if (isMax) Volt
@@ -208,7 +207,7 @@ internal fun HistoryRow(
                 ) {
                     Text(
                         text = if (comparison.status == ProgressStatus.FIRST) statusIcon
-                        else "$statusIcon ${String.format(java.util.Locale.US, "%+.1f%%", comparison.deltaPercent)}",
+                        else "$statusIcon ${String.format(java.util.Locale.US, "%+.2f%%", comparison.deltaPercent)}",
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Bold,
                         color = statusColor
@@ -299,7 +298,7 @@ internal fun ScoreDetailDialog(
                         if (!isFirst) {
                             Spacer(modifier = Modifier.weight(1f))
                             Text(
-                                text = String.format(java.util.Locale.US, "%+.1f%%", comparison.deltaPercent),
+                                text = String.format(java.util.Locale.US, "%+.2f%%", comparison.deltaPercent),
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Black,
                                 color = statusColor
@@ -315,9 +314,9 @@ internal fun ScoreDetailDialog(
                 val c = d.currentComponents
 
                 if (isSimplified) {
-                    ScoreRow("💪 Оценочный 1RM", "${String.format(java.util.Locale.US, "%.1f", c.metricValue)} кг", null, null)
+                    ScoreRow("💪 Оценочный 1RM", "${FormatUtils.formatTwoDecimals(c.metricValue)} кг", null, null)
                     if (!isFirst) {
-                        ScoreRow("📊 Базовый 1RM", "${String.format(java.util.Locale.US, "%.1f", d.baselineMetric)} кг", null, null)
+                        ScoreRow("📊 Базовый 1RM", "${FormatUtils.formatTwoDecimals(d.baselineMetric)} кг", null, null)
                     }
                     ScoreRow("🔁 Подходы", "${d.currentSets} × [${d.currentReps.joinToString(", ")}]", null, null)
                     if (!isFirst) {
@@ -329,31 +328,51 @@ internal fun ScoreDetailDialog(
                     }
                 } else {
                     val metricStr = when (d.metricType.displayName) {
-                        "Объём" -> "${FormatUtils.formatVolume(c.metricValue)} кг"
-                        "E1RM" -> "${FormatUtils.formatWeight(c.metricValue)} кг"
-                        "Стимул" -> "${c.metricValue.toInt()} / 100"
+                        "Объём" -> "${FormatUtils.formatTwoDecimals(c.metricValue)} кг"
+                        "E1RM" -> "${FormatUtils.formatTwoDecimals(c.metricValue)} кг"
+                        "Стимул" -> "${FormatUtils.formatTwoDecimals(c.metricValue)} / 100"
                         else -> "${c.metricValue.toInt()} повт."
                     }
                     ScoreRow("📊 ${c.metricLabel}", metricStr, null, null)
                     if (c.tensionScore != null) {
-                        ScoreRow("💪 Напряжение", "${(c.tensionScore * 100).toInt()}%", null, null)
+                        ScoreRow(
+                            "💪 Напряжение",
+                            "${FormatUtils.formatTwoDecimals(c.tensionScore * 100.0)}%",
+                            null,
+                            null,
+                        )
                     }
                     if (c.productiveScore != null) {
-                        ScoreRow("🔄 Продуктивность", "${(c.productiveScore * 100).toInt()}%", null, null)
+                        ScoreRow(
+                            "🔄 Продуктивность",
+                            "${FormatUtils.formatTwoDecimals(c.productiveScore * 100.0)}%",
+                            null,
+                            null,
+                        )
                     }
                     ScoreRow("🔁 Подходы × Повторы", "${d.currentSets} × [${d.currentReps.joinToString(", ")}]", null, null)
-                    ScoreRow("⭐ Качество (${d.targetRange})", "${(d.currentRepQuality * 100).toInt()}%", null, null)
+                    ScoreRow(
+                        "⭐ Качество (${d.targetRange})",
+                        "${FormatUtils.formatTwoDecimals(d.currentRepQuality * 100.0)}%",
+                        null,
+                        null,
+                    )
                     if (c.fatiguePenalty > 0) ScoreRow("⚠️ Усталость", "Неравномерность", null, -c.fatiguePenalty)
                     Spacer(modifier = Modifier.height(8.dp))
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                     Spacer(modifier = Modifier.height(8.dp))
                     if (isFirst) {
-                        ScoreRow("🎯 Балл", "${d.currentScore} / 1000", null, null)
+                        ScoreRow(
+                            "🎯 Балл",
+                            "${FormatUtils.formatTwoDecimals(d.currentScore.toDouble())} / 1000",
+                            null,
+                            null,
+                        )
                     } else {
                         val baselineMetricStr = when (d.metricType.displayName) {
-                            "Объём" -> FormatUtils.formatVolume(d.baselineMetric)
-                            "E1RM" -> FormatUtils.formatWeight(d.baselineMetric)
-                            "Стимул" -> d.baselineMetric.toInt().toString()
+                            "Объём" -> FormatUtils.formatTwoDecimals(d.baselineMetric)
+                            "E1RM" -> FormatUtils.formatTwoDecimals(d.baselineMetric)
+                            "Стимул" -> FormatUtils.formatTwoDecimals(d.baselineMetric)
                             else -> d.baselineMetric.toInt().toString()
                         }
                         ScoreRow("📊 ${c.metricLabel}", "$metricStr (база: $baselineMetricStr)", null, null)
@@ -407,7 +426,7 @@ internal fun ScoreRow(label: String, value: String, score: Double?, delta: Doubl
         )
         if (score != null) {
             Text(
-                text = String.format(java.util.Locale.US, "%.3f", score),
+                text = FormatUtils.formatTwoDecimals(score),
                 style = MaterialTheme.typography.bodySmall,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface,
@@ -420,7 +439,7 @@ internal fun ScoreRow(label: String, value: String, score: Double?, delta: Doubl
         if (delta != null && kotlin.math.abs(delta) > 0.0005) {
             val color = if (delta > 0) Color(0xFF4CAF50) else Color(0xFFE53935)
             Text(
-                text = String.format(java.util.Locale.US, "%+.3f", delta),
+                text = String.format(java.util.Locale.US, "%+.2f", delta),
                 style = MaterialTheme.typography.labelSmall,
                 fontWeight = FontWeight.Bold,
                 color = color,
@@ -475,7 +494,7 @@ internal fun ScoreRowPct(
                 textAlign = TextAlign.End)
         } else if (effectivePct != null) {
             val sign = if (effectivePct >= 0) "+" else ""
-            Text("$sign${String.format(java.util.Locale.US, "%.1f", effectivePct)}%",
+            Text("$sign${String.format(java.util.Locale.US, "%.2f", effectivePct)}%",
                 style = MaterialTheme.typography.bodySmall,
                 fontWeight = if (highlight) FontWeight.Black else FontWeight.Bold,
                 color = pctColor,
@@ -699,7 +718,7 @@ internal fun WorkoutDayReportView(
                     Column(horizontalAlignment = Alignment.End) {
                         if (hasPrev) {
                             val sign = if (pct >= 0) "+" else ""
-                            Text("$statusIcon $sign${String.format(java.util.Locale.US, "%.1f", pct)}%",
+                            Text("$statusIcon $sign${String.format(java.util.Locale.US, "%.2f", pct)}%",
                                 style = MaterialTheme.typography.titleLarge,
                                 fontWeight = FontWeight.Black, color = statusColor)
                             Text("vs среднее за 3 сессии",
@@ -752,14 +771,15 @@ internal fun ExerciseDayRow(ex: ExerciseDayScore, isSimplified: Boolean = false)
                     Text(ex.exerciseName, style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.Bold)
                     val entryLine = if (ex.currentEntry != null)
-                        "${ex.currentEntry.weight} кг · ${ex.currentEntry.reps}"
+                        "${FormatUtils.formatTwoDecimals(ex.currentEntry.weight)} кг · ${ex.currentEntry.reps}"
                     else "Пропущено"
                     Text(entryLine, style = MaterialTheme.typography.bodySmall,
                         color = if (ex.currentEntry != null)
                             MaterialTheme.colorScheme.onSurfaceVariant
                         else MaterialTheme.colorScheme.error)
                     if (ex.previousEntry != null && ex.currentEntry != null)
-                        Text("vs ${FormatUtils.formatDate(ex.previousEntry.date)}: ${ex.previousEntry.weight} кг · ${ex.previousEntry.reps}",
+                        Text(
+                            "vs ${FormatUtils.formatDate(ex.previousEntry.date)}: ${FormatUtils.formatTwoDecimals(ex.previousEntry.weight)} кг · ${ex.previousEntry.reps}",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
@@ -768,7 +788,7 @@ internal fun ExerciseDayRow(ex: ExerciseDayScore, isSimplified: Boolean = false)
                     Column(horizontalAlignment = Alignment.End) {
                         if (hasPrev) {
                             val sign = if (ex.deltaPercent >= 0) "+" else ""
-                            Text("$statusIcon $sign${String.format(java.util.Locale.US, "%.1f", ex.deltaPercent)}%",
+                            Text("$statusIcon $sign${String.format(java.util.Locale.US, "%.2f", ex.deltaPercent)}%",
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.Black, color = statusColor)
                         } else if (ex.currentEntry != null) {
@@ -802,7 +822,7 @@ internal fun ExerciseDayRow(ex: ExerciseDayScore, isSimplified: Boolean = false)
                         horizontalArrangement = Arrangement.SpaceBetween) {
                         Text("💪 Оценочный 1RM", style = MaterialTheme.typography.bodySmall,
                             fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-                        Text("${String.format(java.util.Locale.US, "%.1f", pc.metricValue)} кг",
+                        Text("${FormatUtils.formatTwoDecimals(pc.metricValue)} кг",
                             style = MaterialTheme.typography.bodySmall,
                             fontWeight = FontWeight.Black, color = Volt)
                     }
@@ -811,7 +831,7 @@ internal fun ExerciseDayRow(ex: ExerciseDayScore, isSimplified: Boolean = false)
                             horizontalArrangement = Arrangement.SpaceBetween) {
                             Text("📊 Базовый 1RM", style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text("${String.format(java.util.Locale.US, "%.1f", ptr.metricValue)} кг",
+                            Text("${FormatUtils.formatTwoDecimals(ptr.metricValue)} кг",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
@@ -830,7 +850,7 @@ internal fun ExerciseDayRow(ex: ExerciseDayScore, isSimplified: Boolean = false)
                             else -> MaterialTheme.colorScheme.onSurfaceVariant
                         }
                         val sign = if (ex.deltaPercent >= 0) "+" else ""
-                        Text("$sign${String.format(java.util.Locale.US, "%.1f", ex.deltaPercent)}%",
+                        Text("$sign${String.format(java.util.Locale.US, "%.2f", ex.deltaPercent)}%",
                             style = MaterialTheme.typography.bodySmall,
                             fontWeight = FontWeight.Black, color = pctColor)
                     }
@@ -853,7 +873,7 @@ internal fun ExerciseDayRow(ex: ExerciseDayScore, isSimplified: Boolean = false)
                             else -> MaterialTheme.colorScheme.onSurfaceVariant
                         }
                         val sign = if (ex.deltaPercent >= 0) "+" else ""
-                        Text("$sign${String.format(java.util.Locale.US, "%.1f", ex.deltaPercent)}%",
+                        Text("$sign${String.format(java.util.Locale.US, "%.2f", ex.deltaPercent)}%",
                             style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = pctColor)
                     }
                 }
@@ -896,12 +916,12 @@ internal fun DayComponentRow(
             fontWeight = if (highlight) FontWeight.Bold else FontWeight.Normal)
         if (pct != null) {
             val sign = if (pct >= 0) "+" else ""
-            Text("$sign${String.format(java.util.Locale.US, "%.1f", pct)}%",
+            Text("$sign${String.format(java.util.Locale.US, "%.2f", pct)}%",
                 style = MaterialTheme.typography.bodySmall,
                 fontWeight = if (highlight) FontWeight.Black else FontWeight.Bold,
                 color = pctColor)
         } else {
-            Text(String.format(java.util.Locale.US, "%.3f", cur),
+            Text(FormatUtils.formatTwoDecimals(cur),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
         }

@@ -2,6 +2,7 @@ package com.example.gymprogress.data
 
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 object FormatUtils {
 
@@ -52,5 +53,51 @@ object FormatUtils {
         } catch (_: Exception) {
             storageDate
         }
+    }
+
+    /**
+     * Ключ для сопоставления имён упражнений в записях журнала и в справочнике:
+     * пробелы, неразрывные пробелы, регистр не должны давать «разные» упражнения.
+     */
+    fun normalizeExerciseNameKey(name: String): String =
+        name.trim()
+            .replace('\u00A0', ' ')
+            .replace(Regex("\\s+"), " ")
+            .lowercase(Locale.ROOT)
+
+    /** Находит упражнение в справочнике по строке из записи журнала. */
+    fun findExerciseByStoredName(exercises: List<Exercise>, storedExerciseName: String): Exercise? {
+        val t = storedExerciseName.trim()
+        return exercises.firstOrNull { ex ->
+            ex.name.trim() == t || ex.name.trim().equals(t, ignoreCase = true)
+        }
+    }
+
+    /**
+     * Запись журнала относится к выбранному упражнению (в т.ч. другое написание имени в БД).
+     * [historyNameHint] — строка с быстрого «+»; учитывается только если указывает на то же упражнение (тот же id).
+     */
+    fun workoutEntryMatchesExercise(
+        entry: WorkoutEntry,
+        selected: Exercise,
+        allExercises: List<Exercise>,
+        historyNameHint: String?
+    ): Boolean {
+        val stored = entry.exerciseName.trim()
+        val catalog = selected.name.trim()
+        if (normalizeExerciseNameKey(stored) == normalizeExerciseNameKey(catalog)) return true
+        if (stored.equals(catalog, ignoreCase = true)) return true
+        val resolved = findExerciseByStoredName(allExercises, stored)
+        if (resolved?.id == selected.id) return true
+        val p = historyNameHint?.trim()?.takeIf { it.isNotEmpty() }
+        if (p != null) {
+            val preResolved = findExerciseByStoredName(allExercises, p)
+            if (preResolved?.id == selected.id &&
+                (stored == p || normalizeExerciseNameKey(stored) == normalizeExerciseNameKey(p))
+            ) {
+                return true
+            }
+        }
+        return false
     }
 }

@@ -1,25 +1,20 @@
 package com.example.gymprogress.data
 
-import kotlin.math.roundToLong
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
+import kotlin.math.roundToLong
 
 class TrainerRecommendationEngine {
 
-    /** Записи по упражнению: имя из справочника + опционально точная строка из журнала (старые названия в БД). */
+    /** Записи по упражнению: то же сопоставление имён, что в журнале и на Прогрессе. */
     private fun entriesForExerciseNames(
         history: List<WorkoutEntry>,
         exercise: Exercise,
-        historyNameHint: String?
+        historyNameHint: String?,
+        allExercises: List<Exercise>
     ): List<WorkoutEntry> {
-        val nameKeys = buildSet {
-            exercise.name.trim().takeIf { it.isNotEmpty() }?.let { add(it) }
-            historyNameHint?.trim()?.takeIf { it.isNotEmpty() }?.let { add(it) }
-        }
-        if (nameKeys.isEmpty()) return emptyList()
         return history.filter { entry ->
-            val stored = entry.exerciseName.trim()
-            nameKeys.any { key -> stored == key }
+            FormatUtils.workoutEntryMatchesExercise(entry, exercise, allExercises, historyNameHint)
         }.sortedByDescending { it.date }
     }
 
@@ -96,6 +91,7 @@ class TrainerRecommendationEngine {
     fun getRecommendationForExercise(
         exercise: Exercise,
         history: List<WorkoutEntry>,
+        allExercises: List<Exercise>,
         trainingGoal: TrainingGoal,
         settings: TrainerSettings,
         bodyWeightKg: Double?,
@@ -107,6 +103,7 @@ class TrainerRecommendationEngine {
         return buildExerciseRec(
             exercise = exercise,
             history = history,
+            allExercises = allExercises,
             trainingGoal = trainingGoal,
             progressionType = settings.progressionType,
             includeWarmup = settings.includeWarmup,
@@ -387,6 +384,7 @@ class TrainerRecommendationEngine {
                     buildExerciseRec(
                         exercise = ex,
                         history = history,
+                        allExercises = exercises,
                         trainingGoal = trainingGoal,
                         progressionType = progressionType,
                         includeWarmup = includeWarmup,
@@ -471,6 +469,7 @@ class TrainerRecommendationEngine {
     private fun buildExerciseRec(
         exercise: Exercise,
         history: List<WorkoutEntry>,
+        allExercises: List<Exercise>,
         trainingGoal: TrainingGoal,
         progressionType: ProgressionType,
         includeWarmup: Boolean,
@@ -481,7 +480,7 @@ class TrainerRecommendationEngine {
         scoringSystem: ScoringSystem,
         historyNameHint: String? = null
     ): ExerciseRecommendation {
-        val exerciseHistory = entriesForExerciseNames(history, exercise, historyNameHint)
+        val exerciseHistory = entriesForExerciseNames(history, exercise, historyNameHint, allExercises)
 
         val isCompound = exercise.exerciseType == ExerciseType.COMPOUND.name
         val weightStep = if (isCompound) 2.5 else 1.25
