@@ -1,5 +1,7 @@
 package com.example.gymprogress.ui.screens
 
+import androidx.compose.animation.animateContentSize
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -39,7 +41,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -68,24 +74,24 @@ import java.util.Locale
 
 @Composable
 internal fun StatCard(
-    emoji: String,
     title: String,
     value: String,
     modifier: Modifier = Modifier,
-    isHighlight: Boolean = false
+    isHighlight: Boolean = false,
+    @Suppress("UNUSED_PARAMETER") emoji: String? = null
 ) {
     Card(
         modifier = modifier
             .then(
                 if (isHighlight) Modifier.border(
-                    width = 1.5.dp,
-                    color = Volt.copy(alpha = 0.4f),
+                    width = 1.dp,
+                    color = Volt.copy(alpha = 0.35f),
                     shape = CardShape
                 ) else Modifier
             ),
         colors = CardDefaults.cardColors(
             containerColor = if (isHighlight)
-                Volt.copy(alpha = 0.08f)
+                Volt.copy(alpha = 0.06f)
             else MaterialTheme.colorScheme.surface
         ),
         shape = CardShape
@@ -93,24 +99,21 @@ internal fun StatCard(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(Spacing.sm),
-            horizontalAlignment = Alignment.CenterHorizontally
+                .padding(horizontal = Spacing.md, vertical = Spacing.sm)
         ) {
-            Text(emoji, style = MaterialTheme.typography.titleLarge)
-            Spacer(modifier = Modifier.height(Spacing.xxs))
             Text(
-                text = value,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Black,
-                color = if (isHighlight) Volt
-                else MaterialTheme.colorScheme.onSurface
-            )
-            Spacer(modifier = Modifier.height(2.dp))
-            Text(
-                text = title,
+                text = title.uppercase(Locale.forLanguageTag("ru")),
                 style = MaterialTheme.typography.labelSmall,
                 fontWeight = FontWeight.Medium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(Spacing.xxs))
+            Text(
+                text = value,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Black,
+                color = if (isHighlight) Volt
+                else MaterialTheme.colorScheme.onSurface
             )
         }
     }
@@ -126,103 +129,77 @@ internal fun HistoryRow(
     var showDetailDialog by remember { mutableStateOf(false) }
 
     val isMax = entry.weight == maxWeight
-    val statusColor = when (comparison.status) {
-        ProgressStatus.FIRST -> Volt
-        else -> when {
-            comparison.deltaPercent >= 1.0 -> Color(0xFF4CAF50)
-            comparison.deltaPercent <= -1.0 -> MaterialTheme.colorScheme.error
-            else -> MaterialTheme.colorScheme.onSurfaceVariant
-        }
-    }
-    val statusIcon = when (comparison.status) {
-        ProgressStatus.BETTER -> "\u25B2"
-        ProgressStatus.WORSE -> "\u25BC"
-        ProgressStatus.SAME -> "\u2192"
-        ProgressStatus.FIRST -> "\u2605"
-    }
+    val statusColor = progressColor(comparison.status, comparison.deltaPercent)
 
     Card(
+        modifier = Modifier.clickable(enabled = comparison.details != null) { showDetailDialog = true },
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
         ),
         shape = CardShapeSmall
     ) {
-        Column(
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(Spacing.sm)
+                .padding(horizontal = Spacing.md, vertical = Spacing.sm),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = FormatUtils.formatDate(entry.date),
-                    style = MaterialTheme.typography.bodySmall,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.width(86.dp)
-                )
-
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(Spacing.xs))
-                        .background(
-                            if (isMax) Volt.copy(alpha = 0.15f)
-                            else MaterialTheme.colorScheme.surfaceVariant
-                        )
-                        .then(
-                            if (isMax) Modifier.border(
-                                1.dp,
-                                Volt.copy(alpha = 0.3f),
-                                RoundedCornerShape(Spacing.xs)
-                            ) else Modifier
-                        )
-                        .padding(horizontal = Spacing.xs, vertical = Spacing.xxs)
-                ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        text = "${FormatUtils.formatTwoDecimals(entry.weight)} кг",
+                        text = FormatUtils.formatDate(entry.date),
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.Bold,
-                        color = if (isMax) Volt
-                        else MaterialTheme.colorScheme.onSurface
+                        color = MaterialTheme.colorScheme.onSurface
                     )
+                    if (isMax) {
+                        Spacer(modifier = Modifier.width(Spacing.xs))
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(Volt.copy(alpha = 0.18f))
+                                .padding(horizontal = 6.dp, vertical = 1.dp)
+                        ) {
+                            Text(
+                                text = "макс",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = Volt
+                            )
+                        }
+                    }
                 }
-
-                Spacer(modifier = Modifier.width(Spacing.sm))
-
+                Spacer(modifier = Modifier.height(2.dp))
                 val repsList = entry.reps.split(",").map { it.trim() }
                 Text(
-                    text = repsList.joinToString(" \u00B7 "),
+                    text = "${FormatUtils.formatTwoDecimals(entry.weight)} кг × ${repsList.joinToString(",")}",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.weight(1f)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+            }
 
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(Spacing.xxs))
-                        .background(statusColor.copy(alpha = 0.12f))
-                        .clickable { showDetailDialog = true }
-                        .padding(horizontal = Spacing.xs, vertical = 2.dp)
-                ) {
+            Column(horizontalAlignment = Alignment.End) {
+                if (comparison.status == ProgressStatus.FIRST) {
                     Text(
-                        text = if (comparison.status == ProgressStatus.FIRST) statusIcon
-                        else "$statusIcon ${String.format(java.util.Locale.US, "%+.2f%%", comparison.deltaPercent)}",
+                        text = "★",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Black,
+                        color = Volt
+                    )
+                    Text(
+                        text = "первая",
                         style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                } else {
+                    val sign = if (comparison.deltaPercent >= 0) "+" else ""
+                    Text(
+                        text = "$sign${String.format(java.util.Locale.US, "%.2f", comparison.deltaPercent)}%",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Black,
                         color = statusColor
                     )
                 }
-            }
-
-            if (comparison.reason.isNotBlank()) {
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = comparison.reason,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(start = 86.dp)
-                )
             }
         }
     }
@@ -630,7 +607,8 @@ internal fun WorkoutDaySection(
     trainingGoal: TrainingGoal,
     scoringEngine: ScoringEngine = SimplifiedScoreCalculator,
     bodyWeightKg: Double? = null,
-    isSimplified: Boolean = false
+    isSimplified: Boolean = false,
+    sparklineFor: (String) -> List<Double> = { emptyList() }
 ) {
     Text("Группа мышц", style = MaterialTheme.typography.labelMedium,
         fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -662,7 +640,7 @@ internal fun WorkoutDaySection(
             )
         }
         if (report != null) {
-            WorkoutDayReportView(report, isSimplified = isSimplified)
+            WorkoutDayReportView(report, isSimplified = isSimplified, sparklineFor = sparklineFor)
         } else {
             Box(modifier = Modifier.fillMaxWidth().padding(top = 32.dp),
                 contentAlignment = Alignment.Center) {
@@ -678,206 +656,275 @@ internal fun WorkoutDaySection(
 internal fun WorkoutDayReportView(
     report: WorkoutDayReport,
     showOverallCard: Boolean = true,
-    isSimplified: Boolean = false
+    isSimplified: Boolean = false,
+    sparklineFor: (String) -> List<Double> = { emptyList() }
 ) {
     if (showOverallCard) {
         val displayName = MuscleGroup.entries.find { it.name == report.muscleGroupName }?.displayName
             ?: report.muscleGroupName
         val hasPrev = report.previousOverallScore != null
         val pct = report.overallDeltaPercent
-        val statusColor = when (report.overallStatus) {
-            ProgressStatus.FIRST -> Volt
-            else -> when {
-                pct >= 1.0 -> Color(0xFF4CAF50)
-                pct <= -1.0 -> MaterialTheme.colorScheme.error
-                else -> MaterialTheme.colorScheme.onSurfaceVariant
-            }
-        }
-        val statusIcon = when (report.overallStatus) {
-            ProgressStatus.BETTER -> "▲"; ProgressStatus.WORSE -> "▼"
-            ProgressStatus.SAME -> "→"; ProgressStatus.FIRST -> "★"
-        }
+        val statusColor = progressColor(report.overallStatus, pct)
         Card(modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
             shape = CardShape) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text(displayName, style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Spacer(modifier = Modifier.height(4.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("Итого", style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Black)
-                        Text(FormatUtils.formatDate(report.currentDate), style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        if (report.previousDate != null)
-                            Text("vs ${FormatUtils.formatDate(report.previousDate)}",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    Column(horizontalAlignment = Alignment.End) {
-                        if (hasPrev) {
-                            val sign = if (pct >= 0) "+" else ""
-                            Text("$statusIcon $sign${String.format(java.util.Locale.US, "%.2f", pct)}%",
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.Black, color = statusColor)
-                            Text("vs среднее за 3 сессии",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        } else {
-                            Text("★ Первый раз", style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold, color = Volt)
-                        }
-                    }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = Spacing.md, vertical = Spacing.md),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        displayName.uppercase(Locale.forLanguageTag("ru")),
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(FormatUtils.formatDate(report.currentDate),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Black,
+                        color = MaterialTheme.colorScheme.onSurface)
+                }
+                if (hasPrev) {
+                    val sign = if (pct >= 0) "+" else ""
+                    Text("$sign${String.format(java.util.Locale.US, "%.2f", pct)}%",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Black, color = statusColor)
+                } else {
+                    Text("★ первый раз", style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold, color = Volt)
                 }
             }
         }
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(Spacing.xs))
     }
     // Без verticalScroll: WorkoutDayReportView используется как item() внутри LazyColumn;
     // вложенная прокрутка даёт бесконечную высоту и IllegalStateException.
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        report.exercises.forEach { ex -> ExerciseDayRow(ex, isSimplified = isSimplified) }
+    Column(verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
+        report.exercises.forEach { ex ->
+            ExerciseDayRow(
+                ex,
+                isSimplified = isSimplified,
+                sparklinePoints = sparklineFor(ex.exerciseName)
+            )
+        }
         Spacer(modifier = Modifier.height(Spacing.md))
     }
 }
 
 @Composable
-internal fun ExerciseDayRow(ex: ExerciseDayScore, isSimplified: Boolean = false) {
+internal fun ExerciseDayRow(
+    ex: ExerciseDayScore,
+    isSimplified: Boolean = false,
+    sparklinePoints: List<Double> = emptyList()
+) {
     var expanded by remember { mutableStateOf(false) }
     val hasPrev = ex.previousEntry != null && ex.currentEntry != null
-    val statusColor = when (ex.status) {
-        ProgressStatus.FIRST -> Volt
-        else -> when {
-            ex.deltaPercent >= 1.0 -> Color(0xFF4CAF50)
-            ex.deltaPercent <= -1.0 -> MaterialTheme.colorScheme.error
-            else -> MaterialTheme.colorScheme.onSurfaceVariant
-        }
-    }
-    val statusIcon = when (ex.status) {
-        ProgressStatus.BETTER -> "▲"; ProgressStatus.WORSE -> "▼"
-        ProgressStatus.SAME -> "→"; ProgressStatus.FIRST -> "★"
-    }
+    val statusColor = progressColor(ex.status, ex.deltaPercent)
     val hasDetail = ex.comparisonResult?.details != null
-    Card(modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        shape = CardShapeSmall) {
-        Column(modifier = Modifier
+    val metricValue = ex.comparisonResult?.details?.currentComponents?.metricValue
+    val baselineMetric = ex.comparisonResult?.details?.baselineComponents?.metricValue
+
+    Card(
+        modifier = Modifier
             .fillMaxWidth()
-            .then(if (hasDetail) Modifier.clickable { expanded = !expanded } else Modifier)
-            .padding(12.dp)) {
+            .animateContentSize(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        shape = CardShapeSmall
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .then(if (hasDetail) Modifier.clickable { expanded = !expanded } else Modifier)
+                .padding(horizontal = Spacing.md, vertical = Spacing.sm)
+        ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(ex.exerciseName, style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Bold)
+                    Text(
+                        ex.exerciseName,
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
                     val entryLine = if (ex.currentEntry != null)
-                        "${FormatUtils.formatTwoDecimals(ex.currentEntry.weight)} кг · ${ex.currentEntry.reps}"
-                    else "Пропущено"
-                    Text(entryLine, style = MaterialTheme.typography.bodySmall,
+                        "${FormatUtils.formatTwoDecimals(ex.currentEntry.weight)} кг × ${ex.currentEntry.reps}"
+                    else "пропущено"
+                    Text(
+                        entryLine,
+                        style = MaterialTheme.typography.bodySmall,
                         color = if (ex.currentEntry != null)
                             MaterialTheme.colorScheme.onSurfaceVariant
-                        else MaterialTheme.colorScheme.error)
-                    if (ex.previousEntry != null && ex.currentEntry != null)
+                        else MaterialTheme.colorScheme.error
+                    )
+                    if (isSimplified && metricValue != null && metricValue > 0) {
                         Text(
-                            "vs ${FormatUtils.formatDate(ex.previousEntry.date)}: ${FormatUtils.formatTwoDecimals(ex.previousEntry.weight)} кг · ${ex.previousEntry.reps}",
+                            text = "1RM ${FormatUtils.formatTwoDecimals(metricValue)} кг",
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                Row(verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Column(horizontalAlignment = Alignment.End) {
-                        if (hasPrev) {
-                            val sign = if (ex.deltaPercent >= 0) "+" else ""
-                            Text("$statusIcon $sign${String.format(java.util.Locale.US, "%.2f", ex.deltaPercent)}%",
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.Black, color = statusColor)
-                        } else if (ex.currentEntry != null) {
-                            Text("★ Первый", style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold, color = Volt)
-                        } else {
-                            Text("Пропущено", style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.error)
-                        }
-                    }
-                    if (hasDetail) {
-                        Icon(
-                            imageVector = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            fontWeight = FontWeight.Medium,
+                            color = Volt
                         )
                     }
                 }
+
+                if (sparklinePoints.size >= 2) {
+                    Sparkline(
+                        points = sparklinePoints,
+                        color = statusColor.copy(alpha = 0.9f),
+                        modifier = Modifier
+                            .padding(horizontal = Spacing.sm)
+                            .width(52.dp)
+                            .height(24.dp)
+                    )
+                }
+
+                Column(
+                    horizontalAlignment = Alignment.End,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    when {
+                        hasPrev -> {
+                            val sign = if (ex.deltaPercent >= 0) "+" else ""
+                            Text(
+                                "$sign${String.format(java.util.Locale.US, "%.2f", ex.deltaPercent)}%",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Black,
+                                color = statusColor
+                            )
+                        }
+                        ex.currentEntry != null -> {
+                            Text("★", style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Black, color = Volt)
+                            Text("первая", style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        else -> {
+                            Text("—", style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.error)
+                        }
+                    }
+                }
+
+                if (hasDetail) {
+                    Icon(
+                        imageVector = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                        contentDescription = null,
+                        modifier = Modifier
+                            .padding(start = Spacing.xxs)
+                            .size(18.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
+
             if (expanded && hasDetail) {
                 val d = ex.comparisonResult!!.details!!
                 val pc = d.currentComponents
                 val ptr = d.baselineComponents
-                Spacer(modifier = Modifier.height(10.dp))
+                Spacer(modifier = Modifier.height(Spacing.sm))
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(Spacing.xs))
 
                 if (isSimplified) {
-                    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("💪 Оценочный 1RM", style = MaterialTheme.typography.bodySmall,
-                            fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-                        Text("${FormatUtils.formatTwoDecimals(pc.metricValue)} кг",
-                            style = MaterialTheme.typography.bodySmall,
-                            fontWeight = FontWeight.Black, color = Volt)
+                    if (ex.previousEntry != null) {
+                        DetailLine(
+                            "Предыдущая",
+                            "${FormatUtils.formatDate(ex.previousEntry.date)} · ${FormatUtils.formatTwoDecimals(ex.previousEntry.weight)} кг × ${ex.previousEntry.reps}"
+                        )
                     }
-                    if (ptr != null) {
-                        Row(modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text("📊 Базовый 1RM", style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text("${FormatUtils.formatTwoDecimals(ptr.metricValue)} кг",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(6.dp))
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically) {
-                        Text("📈 Прогресс", style = MaterialTheme.typography.bodySmall,
-                            fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-                        val pctColor = when {
-                            ex.deltaPercent >= 1.0 -> Color(0xFF4CAF50)
-                            ex.deltaPercent <= -1.0 -> MaterialTheme.colorScheme.error
-                            else -> MaterialTheme.colorScheme.onSurfaceVariant
-                        }
-                        val sign = if (ex.deltaPercent >= 0) "+" else ""
-                        Text("$sign${String.format(java.util.Locale.US, "%.2f", ex.deltaPercent)}%",
-                            style = MaterialTheme.typography.bodySmall,
-                            fontWeight = FontWeight.Black, color = pctColor)
+                    if (baselineMetric != null && hasPrev) {
+                        DetailLine(
+                            "Базовый 1RM",
+                            "${FormatUtils.formatTwoDecimals(baselineMetric)} кг",
+                            caption = "среднее за 3 сессии"
+                        )
                     }
                 } else {
-                    DayComponentRow("📊 ${pc.metricLabel}", ptr?.metricValue, pc.metricValue, highlight = false)
-                    DayComponentRow("⭐ Качество", ptr?.repQuality, pc.repQuality, highlight = false)
+                    DayComponentRow(pc.metricLabel, ptr?.metricValue, pc.metricValue, highlight = false)
+                    DayComponentRow("Качество", ptr?.repQuality, pc.repQuality, highlight = false)
                     if (pc.fatiguePenalty > 0 || (ptr?.fatiguePenalty ?: 0.0) > 0)
-                        DayComponentRow("⚠️ Усталость", ptr?.fatiguePenalty?.let { -it }, -pc.fatiguePenalty, highlight = false)
-                    Spacer(modifier = Modifier.height(6.dp))
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                    Spacer(modifier = Modifier.height(6.dp))
-                    DayComponentRow("🎯 Балл", ptr?.totalScore?.toDouble(), pc.totalScore.toDouble(), highlight = true)
-                    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text("📈 Прогресс", style = MaterialTheme.typography.bodySmall,
-                            modifier = Modifier.weight(1f), fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface)
-                        val pctColor = when {
-                            ex.deltaPercent >= 1.0 -> Color(0xFF4CAF50)
-                            ex.deltaPercent <= -1.0 -> MaterialTheme.colorScheme.error
-                            else -> MaterialTheme.colorScheme.onSurfaceVariant
-                        }
-                        val sign = if (ex.deltaPercent >= 0) "+" else ""
-                        Text("$sign${String.format(java.util.Locale.US, "%.2f", ex.deltaPercent)}%",
-                            style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = pctColor)
-                    }
+                        DayComponentRow("Усталость", ptr?.fatiguePenalty?.let { -it }, -pc.fatiguePenalty, highlight = false)
+                    Spacer(modifier = Modifier.height(Spacing.xxs))
+                    DayComponentRow("Балл", ptr?.totalScore?.toDouble(), pc.totalScore.toDouble(), highlight = true)
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun DetailLine(label: String, value: String, caption: String? = null) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 3.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            label,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(1f)
+        )
+        Column(horizontalAlignment = Alignment.End) {
+            Text(
+                value,
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            if (caption != null) {
+                Text(
+                    caption,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+internal fun Sparkline(
+    points: List<Double>,
+    modifier: Modifier = Modifier,
+    color: Color = Volt
+) {
+    if (points.size < 2) return
+    Canvas(modifier = modifier) {
+        val w = size.width
+        val h = size.height
+        val min = points.min()
+        val max = points.max()
+        val range = (max - min).takeIf { it > 0.0 } ?: 1.0
+        val path = Path()
+        points.forEachIndexed { i, v ->
+            val x = w * i.toFloat() / (points.size - 1)
+            val y = h - ((v - min) / range * h).toFloat()
+            if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
+        }
+        drawPath(
+            path = path,
+            color = color,
+            style = Stroke(width = 2.5f, cap = StrokeCap.Round)
+        )
+        // маркер последней точки
+        val lastX = w
+        val lastY = h - ((points.last() - min) / range * h).toFloat()
+        drawCircle(color = color, radius = 2.5f, center = Offset(lastX, lastY))
+    }
+}
+
+@Composable
+private fun progressColor(status: ProgressStatus, deltaPercent: Double): Color {
+    return when (status) {
+        ProgressStatus.FIRST -> Volt
+        else -> when {
+            deltaPercent >= 1.0 -> Color(0xFF4CAF50)
+            deltaPercent <= -1.0 -> MaterialTheme.colorScheme.error
+            else -> MaterialTheme.colorScheme.onSurfaceVariant
         }
     }
 }

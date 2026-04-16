@@ -139,22 +139,26 @@ fun StatsScreen(
         Spacer(modifier = Modifier.height(Spacing.sm))
         Row(
             modifier = Modifier
-                .clip(RoundedCornerShape(20.dp))
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(14.dp))
                 .background(MaterialTheme.colorScheme.surfaceVariant)
-                .padding(2.dp)
+                .padding(3.dp),
+            horizontalArrangement = Arrangement.spacedBy(2.dp)
         ) {
             listOf("Упражнение" to 0, "Тренировка" to 1, "Дата" to 2).forEach { (label, mode) ->
                 val selected = statsGroupMode == mode
                 Box(
                     modifier = Modifier
-                        .clip(RoundedCornerShape(18.dp))
+                        .weight(1f)
+                        .clip(RoundedCornerShape(12.dp))
                         .background(if (selected) Volt else Color.Transparent)
                         .clickable { statsGroupMode = mode }
-                        .padding(horizontal = 16.dp, vertical = 6.dp)
+                        .padding(vertical = 8.dp),
+                    contentAlignment = Alignment.Center
                 ) {
                     Text(label,
                         style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold,
+                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
                         color = if (selected) Color.Black else MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
@@ -327,15 +331,13 @@ fun StatsScreen(
                 ) {
                     if (isSimplified && bestE1RM > 0) {
                         StatCard(
-                            emoji = "\uD83D\uDCAA",
-                            title = "Оценочный 1RM",
+                            title = "Рекорд 1RM",
                             value = "${FormatUtils.formatTwoDecimals(bestE1RM)} кг",
                             isHighlight = true,
                             modifier = Modifier.weight(1f)
                         )
                     } else {
                         StatCard(
-                            emoji = "\uD83C\uDFC6",
                             title = "Макс. вес",
                             value = "${FormatUtils.formatTwoDecimals(maxWeight)} кг",
                             isHighlight = true,
@@ -343,7 +345,6 @@ fun StatsScreen(
                         )
                     }
                     StatCard(
-                        emoji = "\uD83C\uDFAF",
                         title = if (isSimplified) "Система" else "Цель",
                         value = if (isSimplified) "1RM" else trainingGoal.displayName,
                         modifier = Modifier.weight(1f)
@@ -422,6 +423,19 @@ fun StatsScreen(
                 }
             }
         } else if (statsGroupMode == 1) {
+            val sparklineForWorkout: (String) -> List<Double> = remember(allEntries, exercises, bodyWeightKg) {
+                { name ->
+                    val ex = exercises.find { it.name == name }
+                    val isBw = ex?.isBodyweight ?: false
+                    allEntries.asSequence()
+                        .filter { it.exerciseName == name }
+                        .sortedWith(compareBy({ it.date }, { it.id }))
+                        .toList()
+                        .takeLast(8)
+                        .map { SimplifiedScoreCalculator.calcE1RMForEntry(it, bodyWeightKg, isBw) }
+                        .filter { it > 0 }
+                }
+            }
             WorkoutDaySection(
                 exercises = exercises,
                 allEntries = allEntries,
@@ -430,7 +444,8 @@ fun StatsScreen(
                 trainingGoal = trainingGoal,
                 scoringEngine = scoringEngine,
                 bodyWeightKg = bodyWeightKg,
-                isSimplified = isSimplified
+                isSimplified = isSimplified,
+                sparklineFor = sparklineForWorkout
             )
         } else {
             // Режим «Дата»: один общий скролл — календарь, блок «Итого», затем список записей (сверху первые по дате/id)
@@ -454,6 +469,20 @@ fun StatsScreen(
                 else null
             }
 
+            val sparklineForDate: (String) -> List<Double> = remember(allEntries, exercises, bodyWeightKg, storageDate) {
+                { name ->
+                    val ex = exercises.find { it.name == name }
+                    val isBw = ex?.isBodyweight ?: false
+                    val upTo = storageDate ?: ""
+                    allEntries.asSequence()
+                        .filter { it.exerciseName == name && it.date <= upTo }
+                        .sortedWith(compareBy({ it.date }, { it.id }))
+                        .toList()
+                        .takeLast(8)
+                        .map { SimplifiedScoreCalculator.calcE1RMForEntry(it, bodyWeightKg, isBw) }
+                        .filter { it > 0 }
+                }
+            }
             LazyColumn(
                 verticalArrangement = Arrangement.spacedBy(Spacing.xs)
             ) {
@@ -485,7 +514,7 @@ fun StatsScreen(
                         }
                     }
                     else -> {
-                        dateReport?.let { report -> item { WorkoutDayReportView(report, showOverallCard = false, isSimplified = isSimplified) } }
+                        dateReport?.let { report -> item { WorkoutDayReportView(report, showOverallCard = false, isSimplified = isSimplified, sparklineFor = sparklineForDate) } }
                     }
                 }
                 item { Spacer(modifier = Modifier.height(Spacing.md)) }
