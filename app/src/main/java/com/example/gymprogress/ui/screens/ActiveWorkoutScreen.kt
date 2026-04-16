@@ -50,12 +50,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.example.gymprogress.data.ExerciseRecommendation
-import com.example.gymprogress.data.MuscleGroup
 import com.example.gymprogress.data.CompletedSet
+import com.example.gymprogress.data.ExerciseRecommendation
+import com.example.gymprogress.data.FormatUtils
+import com.example.gymprogress.data.MuscleGroup
 import com.example.gymprogress.data.SetType
 import com.example.gymprogress.data.WorkoutRecommendation
-import com.example.gymprogress.data.FormatUtils
 import com.example.gymprogress.ui.theme.CardShape
 import com.example.gymprogress.ui.theme.Spacing
 import com.example.gymprogress.ui.theme.Volt
@@ -193,7 +193,6 @@ fun ActiveWorkoutScreen(
                 // Workout complete summary
                 WorkoutSummary(
                     completedSets = completedSets,
-                    exercises = exercises,
                     startTime = workoutStartTime,
                     onFinish = { onFinish(completedSets.toList()) }
                 )
@@ -583,7 +582,6 @@ private fun RestTimer(
 @Composable
 private fun WorkoutSummary(
     completedSets: List<CompletedSet>,
-    @Suppress("unused") exercises: List<ExerciseRecommendation>,
     startTime: Long,
     onFinish: () -> Unit
 ) {

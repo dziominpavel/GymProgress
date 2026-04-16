@@ -13,6 +13,19 @@ object FormatUtils {
     private val storageDateFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern(STORAGE_DATE_PATTERN)
     private val displayDateFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern(DISPLAY_DATE_PATTERN)
 
+    private val journalDayMonthFormatter: DateTimeFormatter =
+        DateTimeFormatter.ofPattern("d MMMM", Locale.forLanguageTag("ru"))
+    private val journalWeekdayFormatter: DateTimeFormatter =
+        DateTimeFormatter.ofPattern("EEEE", Locale.forLanguageTag("ru"))
+
+    /** Заголовок «сегодня» в журнале (например «4 апреля»). */
+    fun formatJournalDayMonth(localDate: LocalDate): String =
+        localDate.format(journalDayMonthFormatter)
+
+    /** День недели для подписей в журнале (например «суббота»). */
+    fun formatJournalWeekday(localDate: LocalDate): String =
+        localDate.format(journalWeekdayFormatter)
+
     fun toStorageDate(localDate: LocalDate): String = localDate.format(storageDateFormatter)
 
     fun parseStorageDate(date: String): LocalDate? {

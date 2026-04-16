@@ -53,7 +53,6 @@ import com.example.gymprogress.data.ScoringSystem
 import com.example.gymprogress.data.SimplifiedScoreCalculator
 import com.example.gymprogress.data.TrainingGoal
 import com.example.gymprogress.data.WorkoutEntry
-import com.example.gymprogress.data.WorkoutScoreCalculator
 import com.example.gymprogress.ui.theme.Spacing
 import com.example.gymprogress.ui.theme.TextFieldShape
 import com.example.gymprogress.ui.theme.Volt
@@ -72,7 +71,7 @@ fun StatsScreen(
     modifier: Modifier = Modifier,
     trainingGoal: TrainingGoal = TrainingGoal.HYPERTROPHY,
     exerciseType: ExerciseType = ExerciseType.COMPOUND,
-    scoringEngine: ScoringEngine = WorkoutScoreCalculator,
+    scoringEngine: ScoringEngine = SimplifiedScoreCalculator,
     scoringSystem: ScoringSystem = ScoringSystem.SIMPLIFIED,
     bodyWeightKg: Double? = null,
     isAnthropometryComplete: Boolean = true

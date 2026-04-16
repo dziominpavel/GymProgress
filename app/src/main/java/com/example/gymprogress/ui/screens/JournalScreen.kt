@@ -4,7 +4,6 @@ import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -29,6 +28,8 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.Icon
@@ -36,8 +37,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -63,8 +62,6 @@ import com.example.gymprogress.ui.theme.FabShape
 import com.example.gymprogress.ui.theme.Spacing
 import com.example.gymprogress.ui.theme.Volt
 import java.time.LocalDate
-import java.time.format.DateTimeFormatter
-import java.util.Locale
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
 @Composable
@@ -91,9 +88,7 @@ fun JournalScreen(
     var entryToEdit by remember { mutableStateOf<WorkoutEntry?>(null) }
 
     val todayLabel = remember {
-        val today = LocalDate.now()
-        val formatter = DateTimeFormatter.ofPattern("d MMMM", Locale.forLanguageTag("ru"))
-        today.format(formatter)
+        FormatUtils.formatJournalDayMonth(LocalDate.now())
     }
 
     val previousSessionDayLabel = remember(previousSessionDate, previousSessionTitleOverride) {
@@ -103,7 +98,7 @@ fun JournalScreen(
         val today = LocalDate.now()
         val formattedDate = FormatUtils.formatDate(previousSessionDate)
         if (parsed.dayOfWeek == today.dayOfWeek) {
-            val dayName = parsed.format(DateTimeFormatter.ofPattern("EEEE", Locale.forLanguageTag("ru")))
+            val dayName = FormatUtils.formatJournalWeekday(parsed)
                 .replaceFirstChar { it.uppercase() }
             "Прошлый $dayName · $formattedDate"
         } else {

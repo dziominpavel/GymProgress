@@ -9,43 +9,86 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.material.icons.filled.List
-import androidx.compose.material.icons.filled.Star
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.gymprogress.data.FormatUtils
+import com.example.gymprogress.data.WorkoutRecommendation
 import com.example.gymprogress.ui.navigation.AppNavigationScaffold
 import com.example.gymprogress.ui.screens.AboutScreen
+import com.example.gymprogress.ui.screens.ActiveWorkoutScreen
 import com.example.gymprogress.ui.screens.AddEntryDialog
+import com.example.gymprogress.ui.screens.ExerciseProgressChartScreen
 import com.example.gymprogress.ui.screens.ExercisesScreen
 import com.example.gymprogress.ui.screens.JournalScreen
 import com.example.gymprogress.ui.screens.SettingsScreen
 import com.example.gymprogress.ui.screens.StatsScreen
-import com.example.gymprogress.data.CompletedSet
-import com.example.gymprogress.ui.screens.ActiveWorkoutScreen
 import com.example.gymprogress.ui.screens.TrainerScreen
 import com.example.gymprogress.ui.screens.TrainerSettingsScreen
-import com.example.gymprogress.ui.screens.ExerciseProgressChartScreen
 import com.example.gymprogress.ui.screens.WorkoutHistoryScreen
-import com.example.gymprogress.data.WorkoutRecommendation
-import com.example.gymprogress.data.ScoringEngine
-import com.example.gymprogress.data.ScoringSystem
 import com.example.gymprogress.ui.theme.GymProgressTheme
-import com.example.gymprogress.data.FormatUtils
 import com.example.gymprogress.viewmodel.WorkoutViewModel
 import java.time.LocalDate
+
+private data class AppOverlayState(
+    val showProgressChart: Boolean = false,
+    val showWorkoutHistory: Boolean = false,
+    val showSettings: Boolean = false,
+    val showAbout: Boolean = false,
+    val showTrainerSettings: Boolean = false,
+    val openedSettingsFromTrainer: Boolean = false,
+    val showActiveWorkout: Boolean = false,
+    val showTrainer: Boolean = false,
+    val showAddDialog: Boolean = false,
+)
+
+private val AppOverlayStateSaver = Saver<MutableState<AppOverlayState>, List<Boolean>>(
+    save = { state ->
+        val s = state.value
+        listOf(
+            s.showProgressChart,
+            s.showWorkoutHistory,
+            s.showSettings,
+            s.showAbout,
+            s.showTrainerSettings,
+            s.openedSettingsFromTrainer,
+            s.showActiveWorkout,
+            s.showTrainer,
+            s.showAddDialog
+        )
+    },
+    restore = {
+        mutableStateOf(
+            AppOverlayState(
+                showProgressChart = it[0],
+                showWorkoutHistory = it[1],
+                showSettings = it[2],
+                showAbout = it[3],
+                showTrainerSettings = it[4],
+                openedSettingsFromTrainer = it[5],
+                showActiveWorkout = it[6],
+                showTrainer = it[7],
+                showAddDialog = it[8]
+            )
+        )
+    }
+)
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -64,15 +107,7 @@ fun GymProgressApp(viewModel: WorkoutViewModel = viewModel()) {
     // Navigation state: tab, modals, overlays
     var currentDestination by rememberSaveable { mutableStateOf(AppDestinations.JOURNAL) }
     var showMoreMenu by remember { mutableStateOf(false) }
-    var showAddDialog by rememberSaveable { mutableStateOf(false) }
-    var showSettings by rememberSaveable { mutableStateOf(false) }
-    var showAbout by rememberSaveable { mutableStateOf(false) }
-    var showTrainer by rememberSaveable { mutableStateOf(false) }
-    var showTrainerSettings by rememberSaveable { mutableStateOf(false) }
-    var openedSettingsFromTrainer by rememberSaveable { mutableStateOf(false) }
-    var showActiveWorkout by rememberSaveable { mutableStateOf(false) }
-    var showWorkoutHistory by rememberSaveable { mutableStateOf(false) }
-    var showProgressChart by rememberSaveable { mutableStateOf(false) }
+    var overlay by rememberSaveable(saver = AppOverlayStateSaver) { mutableStateOf(AppOverlayState()) }
     var activeWorkoutRec by remember { mutableStateOf<WorkoutRecommendation?>(null) }
     var preselectedExerciseForAdd by rememberSaveable { mutableStateOf<String?>(null) }
 
@@ -112,23 +147,26 @@ fun GymProgressApp(viewModel: WorkoutViewModel = viewModel()) {
         }
     }
 
-    LaunchedEffect(selectedExercise, showProgressChart) {
-        if (showProgressChart && selectedExercise == null) {
-            showProgressChart = false
+    LaunchedEffect(selectedExercise, overlay.showProgressChart) {
+        if (overlay.showProgressChart && selectedExercise == null) {
+            overlay = overlay.copy(showProgressChart = false)
         }
     }
 
-    // Resolve active workout state before branching
-    if (showActiveWorkout && activeWorkoutRec == null && workoutRecommendation != null) {
-        activeWorkoutRec = workoutRecommendation
-    }
-    if (showActiveWorkout && activeWorkoutRec == null) {
-        showActiveWorkout = false
+    LaunchedEffect(overlay.showActiveWorkout, workoutRecommendation) {
+        if (overlay.showActiveWorkout) {
+            if (activeWorkoutRec == null && workoutRecommendation != null) {
+                activeWorkoutRec = workoutRecommendation
+            }
+            if (activeWorkoutRec == null) {
+                overlay = overlay.copy(showActiveWorkout = false)
+            }
+        }
     }
 
     // Full-screen overlays: early returns are safe here (composable body, not a lambda)
-    if (showProgressChart) {
-        BackHandler { showProgressChart = false }
+    if (overlay.showProgressChart) {
+        BackHandler { overlay = overlay.copy(showProgressChart = false) }
         val chartExercise = selectedExercise
         if (chartExercise != null) {
             val chartExerciseMeta = allExercises.find { it.name == chartExercise }
@@ -142,29 +180,29 @@ fun GymProgressApp(viewModel: WorkoutViewModel = viewModel()) {
                 bodyWeightKg = bodyWeightKg,
                 isBodyweightExercise = chartExerciseMeta?.isBodyweight == true,
                 isAnthropometryIncompleteForBw = !isAnthropometryComplete,
-                onBack = { showProgressChart = false },
+                onBack = { overlay = overlay.copy(showProgressChart = false) },
                 modifier = Modifier.fillMaxSize()
             )
         }
         return
     }
 
-    if (showWorkoutHistory) {
-        BackHandler { showWorkoutHistory = false }
+    if (overlay.showWorkoutHistory) {
+        BackHandler { overlay = overlay.copy(showWorkoutHistory = false) }
         WorkoutHistoryScreen(
             entries = entries,
             exercises = allExercises,
             bodyWeightKg = bodyWeightKg,
             onDeleteEntry = { viewModel.deleteEntry(it) },
             onUpdateEntry = { viewModel.updateEntry(it) },
-            onBack = { showWorkoutHistory = false },
+            onBack = { overlay = overlay.copy(showWorkoutHistory = false) },
             modifier = Modifier.fillMaxSize()
         )
         return
     }
 
-    if (showSettings) {
-        BackHandler { showSettings = false }
+    if (overlay.showSettings) {
+        BackHandler { overlay = overlay.copy(showSettings = false) }
         SettingsScreen(
             currentGoal = trainingGoal,
             bodyWeightKg = bodyWeightKg,
@@ -177,53 +215,57 @@ fun GymProgressApp(viewModel: WorkoutViewModel = viewModel()) {
             onScoringSystemChanged = { viewModel.setScoringSystem(it) },
             onGenderChanged = { viewModel.setGender(it) },
             onHeightCmChanged = { viewModel.setHeightCm(it) },
-            onBack = { showSettings = false },
+            onBack = { overlay = overlay.copy(showSettings = false) },
             modifier = Modifier.fillMaxSize()
         )
         return
     }
 
-    if (showAbout) {
-        BackHandler { showAbout = false }
+    if (overlay.showAbout) {
+        BackHandler { overlay = overlay.copy(showAbout = false) }
         AboutScreen(
-            onBack = { showAbout = false },
+            onBack = { overlay = overlay.copy(showAbout = false) },
             modifier = Modifier.fillMaxSize()
         )
         return
     }
 
-    if (showTrainerSettings) {
+    if (overlay.showTrainerSettings) {
         BackHandler {
             viewModel.updateTrainerSettings(trainerSettings)
-            showTrainerSettings = false
-            if (openedSettingsFromTrainer) showTrainer = true
+            overlay = overlay.copy(
+                showTrainerSettings = false,
+                showTrainer = overlay.openedSettingsFromTrainer
+            )
         }
         TrainerSettingsScreen(
             settings = trainerSettings,
             onSettingsChanged = { viewModel.updateTrainerSettings(it) },
             onBack = {
-                showTrainerSettings = false
-                if (openedSettingsFromTrainer) showTrainer = true
+                overlay = overlay.copy(
+                    showTrainerSettings = false,
+                    showTrainer = overlay.openedSettingsFromTrainer
+                )
             },
             modifier = Modifier.fillMaxSize()
         )
         return
     }
 
-    if (showActiveWorkout && activeWorkoutRec != null) {
+    if (overlay.showActiveWorkout && activeWorkoutRec != null) {
         BackHandler {
-            showActiveWorkout = false
+            overlay = overlay.copy(showActiveWorkout = false)
             activeWorkoutRec = null
         }
         ActiveWorkoutScreen(
             recommendation = activeWorkoutRec!!,
             onFinish = { completedSets ->
                 viewModel.saveCompletedWorkout(completedSets)
-                showActiveWorkout = false
+                overlay = overlay.copy(showActiveWorkout = false)
                 activeWorkoutRec = null
             },
             onCancel = {
-                showActiveWorkout = false
+                overlay = overlay.copy(showActiveWorkout = false)
                 activeWorkoutRec = null
             },
             modifier = Modifier.fillMaxSize()
@@ -231,20 +273,27 @@ fun GymProgressApp(viewModel: WorkoutViewModel = viewModel()) {
         return
     }
 
-    if (showTrainer) {
-        BackHandler { showTrainer = false }
+    if (overlay.showTrainer) {
+        BackHandler {
+            viewModel.clearAiAdvice()
+            overlay = overlay.copy(showTrainer = false)
+        }
         TrainerScreen(
             recommendation = workoutRecommendation,
-            onBack = { showTrainer = false },
+            onBack = {
+                viewModel.clearAiAdvice()
+                overlay = overlay.copy(showTrainer = false)
+            },
             onOpenSettings = {
-                openedSettingsFromTrainer = true
-                showTrainer = false
-                showTrainerSettings = true
+                overlay = overlay.copy(
+                    openedSettingsFromTrainer = true,
+                    showTrainer = false,
+                    showTrainerSettings = true
+                )
             },
             onStartWorkout = { rec ->
                 activeWorkoutRec = rec
-                showTrainer = false
-                showActiveWorkout = true
+                overlay = overlay.copy(showTrainer = false, showActiveWorkout = true)
             },
             isAiAvailable = viewModel.isAiAvailable,
             aiAdvice = aiAdvice,
@@ -264,12 +313,11 @@ fun GymProgressApp(viewModel: WorkoutViewModel = viewModel()) {
             onMoreMenuDismiss = { showMoreMenu = false },
             onMoreMenuToggle = { showMoreMenu = !showMoreMenu },
             onOpenTrainerSettings = {
-                openedSettingsFromTrainer = false
-                showTrainerSettings = true
+                overlay = overlay.copy(openedSettingsFromTrainer = false, showTrainerSettings = true)
             },
-            onOpenHistory = { showWorkoutHistory = true },
-            onOpenSettings = { showSettings = true },
-            onOpenAbout = { showAbout = true },
+            onOpenHistory = { overlay = overlay.copy(showWorkoutHistory = true) },
+            onOpenSettings = { overlay = overlay.copy(showSettings = true) },
+            onOpenAbout = { overlay = overlay.copy(showAbout = true) },
             modifier = Modifier.fillMaxSize()
         ) { destination ->
             when (destination) {
@@ -285,12 +333,12 @@ fun GymProgressApp(viewModel: WorkoutViewModel = viewModel()) {
                     selectedDayIndex = journalSelectedDayIndex,
                     onSelectDay = { viewModel.setJournalPreviousDay(it) },
                     workoutRecommendation = workoutRecommendation,
-                    onAddClick = { showAddDialog = true },
+                    onAddClick = { overlay = overlay.copy(showAddDialog = true) },
                     onQuickAdd = { exerciseName ->
                         preselectedExerciseForAdd = exerciseName
-                        showAddDialog = true
+                        overlay = overlay.copy(showAddDialog = true)
                     },
-                    onOpenTrainer = { showTrainer = true },
+                    onOpenTrainer = { overlay = overlay.copy(showTrainer = true) },
                     onDeleteEntry = { viewModel.deleteEntry(it) },
                     onUpdateEntry = { viewModel.updateEntry(it) },
                     modifier = Modifier.fillMaxSize()
@@ -310,7 +358,7 @@ fun GymProgressApp(viewModel: WorkoutViewModel = viewModel()) {
                     entriesForExercise = entriesForExercise,
                     allEntries = entries,
                     onExerciseSelected = { viewModel.selectExercise(it) },
-                    onOpenProgressChart = { showProgressChart = true },
+                    onOpenProgressChart = { overlay = overlay.copy(showProgressChart = true) },
                     trainingGoal = trainingGoal,
                     exerciseType = selectedExerciseType,
                     scoringEngine = scoringEngine,
@@ -330,7 +378,7 @@ fun GymProgressApp(viewModel: WorkoutViewModel = viewModel()) {
 
     val exerciseRecommendationForJournal by viewModel.exerciseRecommendationForJournal.collectAsState()
 
-    if (showAddDialog) {
+    if (overlay.showAddDialog) {
         AddEntryDialog(
             exercises = allExercises,
             history = entries,
@@ -344,13 +392,13 @@ fun GymProgressApp(viewModel: WorkoutViewModel = viewModel()) {
                 viewModel.loadExerciseRecommendationForJournal(catalogName, historyHint)
             },
             onDismiss = {
-                showAddDialog = false
+                overlay = overlay.copy(showAddDialog = false)
                 preselectedExerciseForAdd = null
                 viewModel.clearExerciseRecommendationForJournal()
             },
             onConfirm = { date, name, weight, reps ->
                 viewModel.addEntry(date, name, weight, reps)
-                showAddDialog = false
+                overlay = overlay.copy(showAddDialog = false)
                 preselectedExerciseForAdd = null
             }
         )

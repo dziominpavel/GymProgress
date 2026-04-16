@@ -1,7 +1,5 @@
 package com.example.gymprogress.data
 
-import java.time.LocalDate
-import java.time.temporal.ChronoUnit
 import kotlin.math.roundToLong
 
 class TrainerRecommendationEngine {
@@ -9,9 +7,7 @@ class TrainerRecommendationEngine {
     /** Записи по упражнению: как Room getEntriesByExercise(exercise.name) + trim/normalize. */
     private fun entriesForExerciseNames(
         history: List<WorkoutEntry>,
-        exercise: Exercise,
-        @Suppress("UNUSED_PARAMETER") historyNameHint: String?,
-        @Suppress("UNUSED_PARAMETER") allExercises: List<Exercise>
+        exercise: Exercise
     ): List<WorkoutEntry> {
         return FormatUtils.workoutEntriesMatchingCatalogName(history, exercise.name)
             .sortedByDescending { it.date }
@@ -173,7 +169,7 @@ class TrainerRecommendationEngine {
         val rotationHistory = historyForRotation(history)
         if (rotationHistory.isEmpty()) return null
 
-        val lastDate = rotationHistory.maxOfOrNull { parseDate(it.date) } ?: return null
+        val lastDate = rotationHistory.maxOfOrNull { parseTrainerDate(it.date) } ?: return null
         val lastStorageDate = FormatUtils.toStorageDate(lastDate)
         val lastExerciseNames = rotationHistory
             .filter { it.date == lastStorageDate }
@@ -204,7 +200,7 @@ class TrainerRecommendationEngine {
         val rotationHistory = historyForRotation(history)
         if (rotationHistory.isEmpty()) return 0
 
-        val lastDate = rotationHistory.maxOfOrNull { parseDate(it.date) } ?: return 0
+        val lastDate = rotationHistory.maxOfOrNull { parseTrainerDate(it.date) } ?: return 0
         val lastStorageDate = FormatUtils.toStorageDate(lastDate)
         val lastExerciseNames = rotationHistory
             .filter { it.date == lastStorageDate }
@@ -218,134 +214,6 @@ class TrainerRecommendationEngine {
         val totalDays = getTotalDays(settings)
         if (totalDays <= 1) return emptyList()
         return (0 until totalDays).map { i -> i to getDayLabel(settings, i) }
-    }
-
-    private fun getTotalDays(settings: TrainerSettings): Int {
-        return when (settings.splitType) {
-            SplitType.FULL_BODY -> 1
-            SplitType.UPPER_LOWER -> 2
-            SplitType.PUSH_PULL_LEGS -> 3
-            SplitType.CUSTOM -> settings.customSplitDays.size.coerceAtLeast(1)
-        }
-    }
-
-    private fun determineNextDayIndex(
-        settings: TrainerSettings,
-        history: List<WorkoutEntry>,
-        exercises: List<Exercise> = emptyList()
-    ): Int {
-        if (history.isEmpty()) return 0
-
-        val totalDays = getTotalDays(settings)
-        if (totalDays == 1) return 0
-
-        // Для рекомендации тренера также считаем следующий день по последней
-        // завершённой тренировке, чтобы во время текущего дня сплит не смещался.
-        val rotationHistory = historyForRotation(history)
-        if (rotationHistory.isEmpty()) return 0
-
-        val lastDate = rotationHistory.maxOfOrNull { parseDate(it.date) } ?: return 0
-        val lastExerciseNames = rotationHistory
-            .filter { it.date == FormatUtils.toStorageDate(lastDate) }
-            .map { it.exerciseName }
-            .toSet()
-
-        val lastDayIndex = guessDayIndexFromExercises(settings, lastExerciseNames, exercises)
-        return (lastDayIndex + 1) % totalDays
-    }
-
-    private fun guessDayIndexFromExercises(
-        settings: TrainerSettings,
-        exerciseNames: Set<String>,
-        exercises: List<Exercise> = emptyList()
-    ): Int {
-        if (exerciseNames.isEmpty()) return 0
-
-        val usedGroups = exercises
-            .filter { it.name in exerciseNames }
-            .map { it.muscleGroup }
-            .toSet()
-
-        if (usedGroups.isEmpty()) return 0
-
-        val totalDays = getTotalDays(settings)
-
-        var bestDay = 0
-        var bestOverlap = 0
-
-        for (dayIndex in 0 until totalDays) {
-            val dayGroups = getMuscleGroupsForDay(settings, dayIndex).map { it.name }.toSet()
-            val overlap = usedGroups.intersect(dayGroups).size
-            if (overlap > bestOverlap) {
-                bestOverlap = overlap
-                bestDay = dayIndex
-            }
-        }
-
-        return bestDay
-    }
-
-    private fun getMuscleGroupsForDay(
-        settings: TrainerSettings,
-        dayIndex: Int
-    ): List<MuscleGroup> {
-        return when (settings.splitType) {
-            SplitType.FULL_BODY -> MuscleGroup.entries.toList()
-            SplitType.UPPER_LOWER -> {
-                if (dayIndex % 2 == 0) {
-                    listOf(
-                        MuscleGroup.CHEST, MuscleGroup.BACK,
-                        MuscleGroup.SHOULDERS, MuscleGroup.BICEPS, MuscleGroup.TRICEPS
-                    )
-                } else {
-                    listOf(MuscleGroup.LEGS, MuscleGroup.ABS)
-                }
-            }
-            SplitType.PUSH_PULL_LEGS -> {
-                when (dayIndex % 3) {
-                    0 -> listOf(MuscleGroup.CHEST, MuscleGroup.SHOULDERS, MuscleGroup.TRICEPS)
-                    1 -> listOf(MuscleGroup.BACK, MuscleGroup.BICEPS)
-                    else -> listOf(MuscleGroup.LEGS, MuscleGroup.ABS)
-                }
-            }
-            SplitType.CUSTOM -> {
-                settings.customSplitDays[dayIndex]
-                    ?: MuscleGroup.entries.toList()
-            }
-        }
-    }
-
-    private fun getDayLabel(settings: TrainerSettings, dayIndex: Int): String {
-        return when (settings.splitType) {
-            SplitType.FULL_BODY -> "Full Body"
-            SplitType.UPPER_LOWER -> if (dayIndex % 2 == 0) "Upper (Верх)" else "Lower (Низ)"
-            SplitType.PUSH_PULL_LEGS -> when (dayIndex % 3) {
-                0 -> "Push (Жим)"
-                1 -> "Pull (Тяга)"
-                else -> "Legs (Ноги)"
-            }
-            SplitType.CUSTOM -> "День ${dayIndex + 1}"
-        }
-    }
-
-    private fun shouldDeload(
-        settings: TrainerSettings,
-        history: List<WorkoutEntry>
-    ): Boolean {
-        if (!settings.autoDeload) return false
-        if (history.isEmpty()) return false
-
-        val dates = history.map { parseDate(it.date) }.distinct().sorted()
-        if (dates.size < 2) return false
-
-        val firstDate = dates.first()
-        val lastDate = dates.last()
-        val weeksSinceStart = ChronoUnit.WEEKS.between(firstDate, lastDate)
-
-        val interval = settings.deloadIntervalWeeks
-        if (interval <= 0) return false
-
-        return weeksSinceStart > 0 && weeksSinceStart % interval == 0L
     }
 
     private fun buildExerciseList(
@@ -461,7 +329,7 @@ class TrainerRecommendationEngine {
             .toSet()
 
         val relevantHistory = history.filter { it.exerciseName in relevantExerciseNames }
-        val lastEntry = relevantHistory.maxByOrNull { parseDate(it.date) } ?: return null
+        val lastEntry = relevantHistory.maxByOrNull { parseTrainerDate(it.date) } ?: return null
         return lastEntry.date
     }
 
@@ -477,9 +345,9 @@ class TrainerRecommendationEngine {
         bodyWeightKg: Double?,
         scoringEngine: ScoringEngine,
         scoringSystem: ScoringSystem,
-        historyNameHint: String? = null
+        @Suppress("UNUSED_PARAMETER") historyNameHint: String? = null
     ): ExerciseRecommendation {
-        val exerciseHistory = entriesForExerciseNames(history, exercise, historyNameHint, allExercises)
+        val exerciseHistory = entriesForExerciseNames(history, exercise)
 
         val isCompound = exercise.exerciseType == ExerciseType.COMPOUND.name
         val weightStep = if (isCompound) 2.5 else 1.25
@@ -783,23 +651,6 @@ class TrainerRecommendationEngine {
 
     private fun parseReps(repsString: String): List<Int> {
         return repsString.split(",").mapNotNull { it.trim().toIntOrNull() }
-    }
-
-    private fun parseDate(dateString: String): LocalDate {
-        return FormatUtils.parseStorageDate(dateString) ?: LocalDate.now()
-    }
-
-    /**
-     * История, по которой считаем «последний завершённый день» для сплита.
-     * Если есть тренировки до сегодняшнего дня — используем только их
-     * (игнорируя текущий незавершённый день). Если в истории только сегодня —
-     * возвращаем все записи как есть.
-     */
-    private fun historyForRotation(history: List<WorkoutEntry>): List<WorkoutEntry> {
-        if (history.isEmpty()) return emptyList()
-        val today = LocalDate.now()
-        val past = history.filter { parseDate(it.date).isBefore(today) }
-        return if (past.isNotEmpty()) past else history
     }
 
     private fun Double.roundToNearest(step: Double): Double {

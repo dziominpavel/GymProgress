@@ -43,6 +43,13 @@ private data class TrainerRecommendationCore(
     val history: List<WorkoutEntry>
 )
 
+private data class JournalSplitUiState(
+    val sessionEntries: List<WorkoutEntry>,
+    val sessionDate: String?,
+    val titleOverride: String?,
+    val dayMuscleGroups: List<String>
+)
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class WorkoutViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -143,17 +150,18 @@ class WorkoutViewModel(application: Application) : AndroidViewModel(application)
         .map { trainerEngine.getSplitDayOptions(it) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    private val journalSessionState: StateFlow<Triple<List<WorkoutEntry>, String?, String?>> = combine(
+    private val journalSplitUi: StateFlow<JournalSplitUiState> = combine(
         allEntries,
         trainerSettings,
         allExercises,
         _journalSelectedDayIndex
     ) { entries, settings, exercises, selectedDay ->
+        val nextSession = trainerEngine.findNextDaySessionInSplit(settings, entries, exercises)
         val result = when {
             selectedDay != null -> trainerEngine.findSessionForDayIndex(settings, entries, exercises, selectedDay)
-            else -> trainerEngine.findNextDaySessionInSplit(settings, entries, exercises)
+            else -> nextSession
         }
-        when (val session = result) {
+        val (sessionEntries, sessionDate, titleOverride) = when (val session = result) {
             null -> {
                 if (selectedDay != null) {
                     val options = trainerEngine.getSplitDayOptions(settings)
@@ -174,43 +182,43 @@ class WorkoutViewModel(application: Application) : AndroidViewModel(application)
                 "Прошлая тренировка в сплите: ${session.dayLabel} · ${FormatUtils.formatDate(session.date)}"
             )
         }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), Triple(emptyList(), null, null))
+        val displayedDayIndex = when {
+            selectedDay != null -> selectedDay
+            else -> if (nextSession != null) {
+                trainerEngine.getNextDayIndex(settings, entries, exercises)
+            } else {
+                null
+            }
+        }
+        val dayMuscleGroups = displayedDayIndex?.let { dayIndex ->
+            trainerEngine.getMuscleGroupsForDayPublic(settings, dayIndex).map { it.displayName }
+        } ?: emptyList()
+        JournalSplitUiState(sessionEntries, sessionDate, titleOverride, dayMuscleGroups)
+    }.stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5000),
+        JournalSplitUiState(emptyList(), null, null, emptyList())
+    )
 
-    val previousSessionForJournal: StateFlow<List<WorkoutEntry>> = journalSessionState
-        .map { it.first }
+    val previousSessionForJournal: StateFlow<List<WorkoutEntry>> = journalSplitUi
+        .map { it.sessionEntries }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    val previousSessionDateForJournal: StateFlow<String?> = journalSessionState
-        .map { it.second }
+    val previousSessionDateForJournal: StateFlow<String?> = journalSplitUi
+        .map { it.sessionDate }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
-    val previousSessionTitleOverride: StateFlow<String?> = journalSessionState
-        .map { it.third }
+    val previousSessionTitleOverride: StateFlow<String?> = journalSplitUi
+        .map { it.titleOverride }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     fun setJournalPreviousDay(dayIndex: Int?) {
         _journalSelectedDayIndex.value = dayIndex
     }
 
-    val previousSessionDayMuscleGroups: StateFlow<List<String>> = combine(
-        trainerSettings,
-        allEntries,
-        allExercises,
-        _journalSelectedDayIndex
-    ) { settings, entries, exercises, selectedDay ->
-        val displayedDayIndex = when {
-            selectedDay != null -> selectedDay
-            else -> if (trainerEngine.findNextDaySessionInSplit(settings, entries, exercises) != null)
-                trainerEngine.getNextDayIndex(settings, entries, exercises)
-            else null
-        }
-        displayedDayIndex?.let { dayIndex ->
-            trainerEngine.getMuscleGroupsForDayPublic(settings, dayIndex).map { it.displayName }
-        } ?: emptyList()
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-    val previousSameDaySession: StateFlow<List<WorkoutEntry>> = previousSessionForJournal
-    val previousSameDaySessionDate: StateFlow<String?> = previousSessionDateForJournal
+    val previousSessionDayMuscleGroups: StateFlow<List<String>> = journalSplitUi
+        .map { it.dayMuscleGroups }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private fun findPreviousSession(
         entries: List<WorkoutEntry>,
@@ -257,43 +265,39 @@ class WorkoutViewModel(application: Application) : AndroidViewModel(application)
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ExerciseType.COMPOUND)
 
-    fun addEntry(date: String, exerciseName: String, weight: Double, reps: String) {
+    private fun safeDb(errorFallback: String, block: suspend () -> Unit) {
         viewModelScope.launch {
             try {
-                workoutDao.insert(
-                    WorkoutEntry(
-                        date = date,
-                        exerciseName = exerciseName.trim(),
-                        weight = weight,
-                        reps = reps.trim()
-                    )
-                )
+                block()
             } catch (e: Exception) {
-                _errorMessage.value = e.message ?: "Не удалось добавить запись"
-                Log.e(TAG, "Failed to add entry", e)
+                _errorMessage.value = e.message ?: errorFallback
+                Log.e(TAG, errorFallback, e)
             }
+        }
+    }
+
+    fun addEntry(date: String, exerciseName: String, weight: Double, reps: String) {
+        safeDb("Не удалось добавить запись") {
+            workoutDao.insert(
+                WorkoutEntry(
+                    date = date,
+                    exerciseName = exerciseName.trim(),
+                    weight = weight,
+                    reps = reps.trim()
+                )
+            )
         }
     }
 
     fun updateEntry(entry: WorkoutEntry) {
-        viewModelScope.launch {
-            try {
-                workoutDao.update(entry)
-            } catch (e: Exception) {
-                _errorMessage.value = e.message ?: "Не удалось обновить запись"
-                Log.e(TAG, "Failed to update entry", e)
-            }
+        safeDb("Не удалось обновить запись") {
+            workoutDao.update(entry)
         }
     }
 
     fun deleteEntry(entry: WorkoutEntry) {
-        viewModelScope.launch {
-            try {
-                workoutDao.delete(entry)
-            } catch (e: Exception) {
-                _errorMessage.value = e.message ?: "Не удалось удалить запись"
-                Log.e(TAG, "Failed to delete entry", e)
-            }
+        safeDb("Не удалось удалить запись") {
+            workoutDao.delete(entry)
         }
     }
 
@@ -307,116 +311,67 @@ class WorkoutViewModel(application: Application) : AndroidViewModel(application)
         exerciseType: String = ExerciseType.COMPOUND.name,
         isBodyweight: Boolean = false
     ) {
-        viewModelScope.launch {
-            try {
-                exerciseDao.insert(
-                    Exercise(
-                        name = name.trim(),
-                        muscleGroup = muscleGroup,
-                        exerciseType = exerciseType,
-                        isBodyweight = isBodyweight
-                    )
+        safeDb("Не удалось добавить упражнение") {
+            exerciseDao.insert(
+                Exercise(
+                    name = name.trim(),
+                    muscleGroup = muscleGroup,
+                    exerciseType = exerciseType,
+                    isBodyweight = isBodyweight
                 )
-            } catch (e: Exception) {
-                _errorMessage.value = e.message ?: "Не удалось добавить упражнение"
-                Log.e(TAG, "Failed to add exercise", e)
-            }
+            )
         }
     }
 
     fun updateExercise(exercise: Exercise, oldName: String? = null) {
-        viewModelScope.launch {
-            try {
-                exerciseDao.update(exercise)
-                if (oldName != null && oldName != exercise.name) {
-                    workoutDao.renameExercise(oldName, exercise.name)
-                }
-            } catch (e: Exception) {
-                _errorMessage.value = e.message ?: "Не удалось обновить упражнение"
-                Log.e(TAG, "Failed to update exercise", e)
+        safeDb("Не удалось обновить упражнение") {
+            exerciseDao.update(exercise)
+            if (oldName != null && oldName != exercise.name) {
+                workoutDao.renameExercise(oldName, exercise.name)
             }
         }
     }
 
     fun deleteExercise(exercise: Exercise) {
-        viewModelScope.launch {
-            try {
-                exerciseDao.delete(exercise)
-            } catch (e: Exception) {
-                _errorMessage.value = e.message ?: "Не удалось удалить упражнение"
-                Log.e(TAG, "Failed to delete exercise", e)
-            }
+        safeDb("Не удалось удалить упражнение") {
+            exerciseDao.delete(exercise)
         }
     }
 
     fun setTrainingGoal(goal: TrainingGoal) {
-        viewModelScope.launch {
-            try {
-                settingsRepository.setTrainingGoal(goal)
-            } catch (e: Exception) {
-                _errorMessage.value = e.message ?: "Не удалось сохранить цель"
-                Log.e(TAG, "Failed to set training goal", e)
-            }
+        safeDb("Не удалось сохранить цель") {
+            settingsRepository.setTrainingGoal(goal)
         }
     }
 
     fun setBodyWeightKg(value: Double?) {
-        viewModelScope.launch {
-            try {
-                settingsRepository.setBodyWeightKg(value)
-            } catch (e: Exception) {
-                _errorMessage.value = e.message ?: "Не удалось сохранить вес"
-                Log.e(TAG, "Failed to set body weight", e)
-            }
+        safeDb("Не удалось сохранить вес") {
+            settingsRepository.setBodyWeightKg(value)
         }
     }
 
     fun setScoringSystem(system: ScoringSystem) {
-        viewModelScope.launch {
-            try {
-                settingsRepository.setScoringSystem(system)
-            } catch (e: Exception) {
-                _errorMessage.value = e.message ?: "Не удалось сохранить систему оценки"
-                Log.e(TAG, "Failed to set scoring system", e)
-            }
+        safeDb("Не удалось сохранить систему оценки") {
+            settingsRepository.setScoringSystem(system)
         }
     }
 
     fun setHeightCm(value: Int?) {
-        viewModelScope.launch {
-            try {
-                settingsRepository.setHeightCm(value)
-            } catch (e: Exception) {
-                _errorMessage.value = e.message ?: "Не удалось сохранить рост"
-                Log.e(TAG, "Failed to set height", e)
-            }
+        safeDb("Не удалось сохранить рост") {
+            settingsRepository.setHeightCm(value)
         }
     }
 
     fun setGender(value: Gender?) {
-        viewModelScope.launch {
-            try {
-                settingsRepository.setGender(value)
-            } catch (e: Exception) {
-                _errorMessage.value = e.message ?: "Не удалось сохранить пол"
-                Log.e(TAG, "Failed to set gender", e)
-            }
+        safeDb("Не удалось сохранить пол") {
+            settingsRepository.setGender(value)
         }
     }
 
     fun updateTrainerSettings(settings: TrainerSettings) {
-        viewModelScope.launch {
-            try {
-                settingsRepository.updateTrainerSettings(settings)
-            } catch (e: Exception) {
-                _errorMessage.value = e.message ?: "Не удалось сохранить настройки тренера"
-                Log.e(TAG, "Failed to update trainer settings", e)
-            }
+        safeDb("Не удалось сохранить настройки тренера") {
+            settingsRepository.updateTrainerSettings(settings)
         }
-    }
-
-    fun getAlternatives(exercise: Exercise): List<Exercise> {
-        return trainerEngine.getAlternatives(exercise, allExercises.value)
     }
 
     /**
@@ -487,25 +442,49 @@ class WorkoutViewModel(application: Application) : AndroidViewModel(application)
         val today = FormatUtils.toStorageDate(LocalDate.now())
         val workingSets = completedSets.filter { it.setType == SetType.WORKING }
         val grouped = workingSets.groupBy { it.exerciseName }
-
+        val toInsert = mutableListOf<WorkoutEntry>()
         grouped.forEach { (name, sets) ->
             val distinctWeights = sets.map { it.weight }.distinct()
             if (distinctWeights.size == 1) {
                 val reps = sets.joinToString(",") { it.reps.toString() }
-                addEntry(today, name, distinctWeights.first(), reps)
+                toInsert.add(
+                    WorkoutEntry(
+                        date = today,
+                        exerciseName = name.trim(),
+                        weight = distinctWeights.first(),
+                        reps = reps.trim()
+                    )
+                )
             } else {
                 val mainWeight = sets.groupBy { it.weight }
                     .maxByOrNull { it.value.size }?.key ?: sets.first().weight
                 val mainSets = sets.filter { it.weight == mainWeight }
                 val reps = mainSets.joinToString(",") { it.reps.toString() }
-                addEntry(today, name, mainWeight, reps)
-
+                toInsert.add(
+                    WorkoutEntry(
+                        date = today,
+                        exerciseName = name.trim(),
+                        weight = mainWeight,
+                        reps = reps.trim()
+                    )
+                )
                 val otherGroups = sets.filter { it.weight != mainWeight }.groupBy { it.weight }
                 otherGroups.forEach { (w, wSets) ->
                     val otherReps = wSets.joinToString(",") { it.reps.toString() }
-                    addEntry(today, name, w, otherReps)
+                    toInsert.add(
+                        WorkoutEntry(
+                            date = today,
+                            exerciseName = name.trim(),
+                            weight = w,
+                            reps = otherReps.trim()
+                        )
+                    )
                 }
             }
+        }
+        if (toInsert.isEmpty()) return
+        safeDb("Не удалось сохранить тренировку") {
+            workoutDao.insertEntries(toInsert)
         }
     }
 

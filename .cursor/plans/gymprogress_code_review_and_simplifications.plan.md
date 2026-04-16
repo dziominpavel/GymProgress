@@ -1,173 +1,123 @@
 ---
-name: GymProgress code review and simplifications
-overview: Ревью проекта с фокусом на простоту и читаемость кода без поломки бизнес-логики. Выявлены перегруженные файлы, дублирование форматов дат, размазанная навигация и отсутствие обратной связи по ошибкам. План разбит на фазы по риску и влиянию.
+name: "GymProgress code review and simplifications "
+overview: "Актуальное ревью (апрель 2026): читаемость, отсутствие мёртвого кода, эффективность и надёжность. Сверка с уже выполненными шагами и приоритетный план рефакторинга. "
 todos: []
 isProject: true
 ---
 
-# Ревью проекта GymProgress: упрощение и читаемость
+# Ревью GymProgress: простота, эффективность, надёжность
 
-## Текущее состояние
+## Сводка
 
-- **Архитектура:** одна Activity, один [WorkoutViewModel](app/src/main/java/com/example/gymprogress/viewmodel/WorkoutViewModel.kt), навигация флагами в [MainActivity.kt](app/src/main/java/com/example/gymprogress/MainActivity.kt) (GymProgressApp), без слоя Repository — ViewModel обращается к DAO и SettingsRepository напрямую.
-- **Главные точки роста сложности:**
-  - [MainActivity.kt](app/src/main/java/com/example/gymprogress/MainActivity.kt) (~370 строк): 9 флагов навигации, 12 `collectAsState`, все экраны через `if (showX) { ... return }`, логика `saveCompletedSets` вынесена в конец файла.
-  - [StatsScreen.kt](app/src/main/java/com/example/gymprogress/ui/screens/StatsScreen.kt) (~1370 строк): один файл, много приватных Composable (StatCard, HistoryRow, ScoreDetailDialog, ScoreFormulaHelpDialog, HelpHeader и др.).
-  - [JournalScreen.kt](app/src/main/java/com/example/gymprogress/ui/screens/JournalScreen.kt) (~710 строк): внутри тот же файл — `EditEntryDialog` и дублирование форматов даты.
-  - [AddEntryDialog.kt](app/src/main/java/com/example/gymprogress/ui/screens/AddEntryDialog.kt) (~~509 строк), [TrainerRecommendationEngine.kt](app/src/main/java/com/example/gymprogress/data/TrainerRecommendationEngine.kt) (~~587 строк) — крупные монолитные единицы.
-- **Дублирование:** форматы даты `yyyy-MM-dd` и `dd.MM.yyyy` создаются в 6 местах (MainActivity, AddEntryDialog, JournalScreen x2, WorkoutHistoryScreen, TrainerRecommendationEngine). [FormatUtils](app/src/main/java/com/example/gymprogress/data/FormatUtils.kt) уже содержит `formatDate(storageDate)` для отображения, но парсинг и константы размазаны по экранам.
-- **Обработка ошибок:** в ViewModel при ошибках БД только `Log.e`; состояния для Snackbar/Toast нет — пользователь не видит причину сбоя (в т.ч. при дубликате упражнения после UNIQUE в БД).
-
-При этом бизнес-логика (Room, миграции, алгоритм прогресса, Тренер) уже на проде и трогать её контракты и схему БД не требуется. Ниже — только такие изменения, которые не меняют поведение приложения, а лишь упрощают код и подготовку к будущим доработкам.
+Проект уже выстроен разумно: один `WorkoutViewModel`, Room + DataStore, интерфейс `ScoringEngine` с двумя реализациями, часть тяжёлых экранов вынесена в отдельные файлы. Основные точки роста: **мёртвый и «заглушечный» API**, **дублирование и размер крупных файлов**, **пакетные операции БД**, **упрощение `GymProgressApp`**, **согласованность дефолтов и сортировок**.
 
 ---
 
-## Даты и миграции: важное условие
+## Уже сделано (относительно старых планов)
 
-**Разрешено:** менять или упрощать форматы дат и при необходимости делать дополнительную миграцию БД.
-
-**Главная опасность:** не поломать существующие установки и не потерять данные. У пользователей, у которых уже есть история тренировок, она должна остаться корректной и не пропасть.
-
-**Обязательно при любом изменении хранения дат:**
-
-- Добавить миграцию Room (новая версия БД), в которой все существующие значения даты в `workout_entries` переносятся в новый формат без потерь.
-- Поддерживать в миграции оба варианта: уже нормализованный `yyyy-MM-dd` (миграция 5→6) и, на всякий случай, старый `dd.MM.yyyy`, чтобы ни одна запись не оказалась битой или пустой.
-- После миграции проверять на реальной БД (экспорт с устройства со старой версией): обновление приложения не должно удалять и не портить записи.
-
-Дополнительная миграция для дат допустима; приоритет — сохранность данных у существующих пользователей.
+- [FormatUtils.kt](app/src/main/java/com/example/gymprogress/data/FormatUtils.kt): константы `STORAGE_DATE_PATTERN` / `DISPLAY_DATE_PATTERN`, `toStorageDate`, `parseStorageDate` (в т.ч. fallback на `dd.MM.yyyy`).
+- [EditEntryDialog.kt](app/src/main/java/com/example/gymprogress/ui/screens/EditEntryDialog.kt) вынесен из журнала; используется из `JournalScreen` и `WorkoutHistoryScreen`.
+- Прогресс разбит: [StatsHelp.kt](app/src/main/java/com/example/gymprogress/ui/screens/StatsHelp.kt), [StatsComponents.kt](app/src/main/java/com/example/gymprogress/ui/screens/StatsComponents.kt); [StatsScreen.kt](app/src/main/java/com/example/gymprogress/ui/screens/StatsScreen.kt) ~500 строк.
+- [AppNavigationScaffold.kt](app/src/main/java/com/example/gymprogress/ui/navigation/AppNavigationScaffold.kt) — табы и меню «Ещё» не в одной простыне с логикой экранов.
+- `saveCompletedWorkout` и обработка ошибок БД: [WorkoutViewModel.kt](app/src/main/java/com/example/gymprogress/viewmodel/WorkoutViewModel.kt) (`errorMessage`, Snackbar в [MainActivity.kt](app/src/main/java/com/example/gymprogress/MainActivity.kt)).
 
 ---
 
-## Рекомендуемые улучшения (по приоритету)
+## Мёртвый и лишний код (убрать или задействовать)
 
-### Фаза 1: Низкий риск, быстрый выигрыш по читаемости
-
-**1. Работа с датами (два варианта на выбор)**
-
-**Вариант A — только централизация (без смены схемы):**
-
-- В [FormatUtils.kt](app/src/main/java/com/example/gymprogress/data/FormatUtils.kt) добавить константы форматов (`STORAGE_DATE_PATTERN = "yyyy-MM-dd"`, `DISPLAY_DATE_PATTERN = "dd.MM.yyyy"`), а также `fun toStorageDate(localDate: LocalDate): String`, `fun parseStorageDate(date: String): LocalDate?`, оставив существующий `formatDate(storageDate: String)` для отображения.
-- Заменить все прямые `DateTimeFormatter.ofPattern(...)` и дублирующий парсинг в MainActivity, AddEntryDialog, JournalScreen, WorkoutHistoryScreen, TrainerRecommendationEngine на вызовы FormatUtils.
-- Схему БД не менять; данные остаются строками `yyyy-MM-dd`.
-
-**Вариант B — переход на хранение даты в Long (epoch day или epoch millis) с миграцией:**
-
-- Добавить миграцию 6→7: в `workout_entries` добавить колонку `dateEpochDay INTEGER` (или аналог), заполнить её из существующей `date`: парсить строку (поддержать и `yyyy-MM-dd`, и `dd.MM.yyyy` на случай старых данных), конвертировать в epoch day; для нечитаемых строк — не трогать запись или подставить безопасное значение и залогировать.
-- В следующем шаге (или в той же миграции): перенести данные в новую колонку, удалить старую `date`, переименовать `dateEpochDay` в `date` (или оставить одно поле типа Long в сущности и в схеме). В [WorkoutEntry](app/src/main/java/com/example/gymprogress/data/WorkoutEntry.kt) заменить `date: String` на `dateEpochDay: Long` (или `date: Long`) и добавить TypeConverter для Room. DAO и все места кода перевести на Long / LocalDate через FormatUtils.
-- Плюс: корректная сортировка и сравнение дат без зависимости от формата строки; один источник правды в коде (FormatUtils + конвертеры). Миграция должна гарантировать: ни одна существующая запись не теряется и не искажается.
-
-В обоих вариантах итог: один источник правды для форматов и парсинга; при выборе B — более надёжное хранение и возможность упростить форматы в будущем.
-
-**Рекомендация:** начать с варианта A (быстро, без риска для БД); при желании усилить — позже сделать вариант B с отдельной тщательно проверенной миграцией и тестом на копии продовой БД.
-
-**2. Вынести навигацию и «Ещё» из MainActivity**
-
-- В том же пакете (или `ui/navigation`) ввести один-два композабла:
-  - **Вариант A:** `AppNavigationScaffold(...)` — принимает `currentDestination`, `onDestinationChange`, `onOpenTrainer`, `onOpenHistory`, `onOpenSettings`, `onOpenAbout`, и рендерит `NavigationSuiteScaffold` с табами + пункт «Ещё» с выпадающим меню (сейчас этот блок ~80 строк внутри MainActivity).
-  - **Вариант B:** минимум — вынести только выпадающее меню «Ещё» в `MoreMenuContent(expanded, onDismiss, onTrainer, onHistory, onSettings, onAbout)` и оставить scaffold в MainActivity.
-- В `GymProgressApp` оставить только: состояние навигации (можно объединить в один data-класс, см. ниже), вызовы нового scaffold/меню и `when (currentDestination)` с тремя экранами. Так убирается визуальный шум и дублирование паттерна «showMoreMenu = false; showX = true».
-
-**3. Группировка состояния навигации в MainActivity**
-
-- Ввести, например, `data class AppNavState(...)` с полями: `currentTab`, `showAddDialog`, `showSettings`, `showAbout`, `showTrainer`, `showTrainerSettings`, `showActiveWorkout`, `showWorkoutHistory`, `activeWorkoutRec`, или использовать отдельные `var` но держать их в одном блоке в начале с короткими комментариями (Tab / Modals / Overlays). Альтернатива — один `MutableStateFlow<AppNavState>` в композабле и обновления через `copy`. Цель — не размазывать 9 флагов по коду и упростить чтение.
-- Опционально: вынести логику «если showActiveWorkout и нет activeWorkoutRec — подставить recommendation и т.д.» в одну маленькую функцию `resolveActiveWorkoutState(...)`, чтобы основной композабл не перегружался условиями.
-
-**4. Перенос saveCompletedSets в ViewModel**
-
-- Добавить в [WorkoutViewModel.kt](app/src/main/java/com/example/gymprogress/viewmodel/WorkoutViewModel.kt) метод, например, `fun saveCompletedWorkout(completedSets: List<CompletedSet>)`, и перенести туда всю логику из [MainActivity.kt](app/src/main/java/com/example/gymprogress/MainActivity.kt) (`saveCompletedSets`): определение «сегодня», фильтр WORKING, группировка по упражнению/весу, вызовы `addEntry`. Сигнатуру и поведение (как именно группируются подходы и создаются записи) не менять.
-- В MainActivity оставить только вызов `viewModel.saveCompletedWorkout(completedSets)` и сброс `showActiveWorkout` / `activeWorkoutRec`. Так бизнес-логика «сохранения завершённой тренировки» живёт в одном месте и не размазана по UI.
-
-**5. Обратная связь по ошибкам в ViewModel**
-
-- Добавить в ViewModel, например, `val errorMessage: StateFlow<String?>` и `fun clearError()`. В `addEntry`, `updateEntry`, `deleteEntry`, `addExercise`, `updateExercise`, `deleteExercise`, `setTrainingGoal`, `setBodyWeightKg`, `updateTrainerSettings` в `catch` кроме `Log.e` выставлять `_errorMessage.value = e.message ?: "Ошибка"` (или короткое пользовательское сообщение).
-- В `GymProgressApp` (или в корневом композабле) подписаться на `errorMessage`, показывать Snackbar при не-null и вызывать `clearError()` при dismiss. Это не меняет существующие вызовы из UI, только добавляет наблюдаемое состояние и один блок отображения ошибки — поведение «приложение не падает» сохраняется, но пользователь видит причину сбоя.
+| Что | Где | Действие |
+|-----|-----|----------|
+| `previousSameDaySession`, `previousSameDaySessionDate` | `WorkoutViewModel` — алиасы на `previousSessionForJournal` / `previousSessionDateForJournal` | Нигде не собираются в UI → **удалить** или оставить один комментарий «deprecated alias», если есть внешние потребители (сейчас нет). |
+| `getAlternatives` | `WorkoutViewModel` → `TrainerRecommendationEngine` | UI не вызывает → **удалить из ViewModel**; при появлении UI «альтернативы упражнения» вызывать движок напрямую или вернуть метод. |
+| `clearAiAdvice` | `WorkoutViewModel` | Не вызывается → **удалить** или вызывать при уходе с экрана Тренера / новом запросе (если нужна очистка состояния). |
+| Параметр `exercises` в `WorkoutSummary` | [ActiveWorkoutScreen.kt](app/src/main/java/com/example/gymprogress/ui/screens/ActiveWorkoutScreen.kt) (`@Suppress("unused")`) | **Удалить параметр** и аргумент вызова. |
+| `historyNameHint`, `allExercises` в `entriesForExerciseNames` | [TrainerRecommendationEngine.kt](app/src/main/java/com/example/gymprogress/data/TrainerRecommendationEngine.kt) | Помечены `UNUSED_PARAMETER` → **убрать из сигнатуры** и обновить вызовы, либо реализовать задуманное сопоставление имён (см. `docs/POTENTIAL_ERRORS_ANALYSIS.md`). |
+| `ExampleUnitTest` / шаблон instrumented-теста | `app/src/test`, `androidTest` | Не дают ценности → **заменить** минимальным тестом домена (например, уже есть [SimplifiedScoreCalculatorBestEntryTest.kt](app/src/test/java/com/example/gymprogress/data/SimplifiedScoreCalculatorBestEntryTest.kt)) или удалить шаблон. |
 
 ---
 
-### Фаза 2: Разбиение крупных экранов (без смены поведения)
+## Читаемость и структура
 
-**6. Вынести EditEntryDialog из JournalScreen**
+1. **`GymProgressApp` ([MainActivity.kt](app/src/main/java/com/example/gymprogress/MainActivity.kt))**  
+   Много `rememberSaveable` / `collectAsState` и цепочка `if (overlay) { … return }`. Упростить:
+   - сгруппировать флаги в `data class AppOverlayState` или sealed-класс «текущий полноэкранный экран» (взаимоисключающие экраны — один тип вместо семи boolean);
+   - вынести «разрешение» активной тренировки (`activeWorkoutRec` + `workoutRecommendation`) в чистую функцию или `LaunchedEffect`, без присваивания в теле Composable.
 
-- Перенести [EditEntryDialog](app/src/main/java/com/example/gymprogress/ui/screens/JournalScreen.kt) (и вспомогательные `parseEntryDate` / `parseEntryDateOrNull`, если не переедут в FormatUtils) в отдельный файл, например `EditEntryDialog.kt` в том же пакете `ui.screens`. В JournalScreen оставить только вызов этого композабла. Подписи и контракт не менять.
+2. **`WorkoutViewModel`** (~515 строк)  
+   Повторяющийся шаблон `viewModelScope.launch { try { … } catch { _errorMessage … Log.e } }` для CRUD и настроек → **вспомогательная** `inline fun safeDb(block: suspend () -> Unit)` или делегат, чтобы тело методов оставалось одной строкой вызова DAO/репозитория.
 
-**7. Разбить StatsScreen на несколько файлов**
+3. **`TrainerRecommendationEngine`** (~716 строк)  
+   Логично разнести по файлам в том же пакете (например, `TrainerSplitDay.kt`, `TrainerDeload.kt`, `TrainerExerciseList.kt`) с `internal` функциями и одним публичным фасадом-классом — **без изменения формул**, только границы файлов и имена.
 
-- Вынести в отдельные файлы (в том же пакете или `ui/screens/stats/`):
-  - компоненты помощи: `ScoreFormulaHelpDialog`, `HelpHeader`, `HelpFormula`, `HelpExample`, `HelpNote`, `HelpChip`, `HelpRow`, `HelpGoalRow` — в один файл, например `StatsHelp.kt`;
-  - при необходимости — карточки и строки (StatCard, HistoryRow, ScoreDetailDialog, WorkoutDaySection и т.д.) в `StatsComponents.kt`.
-- [StatsScreen.kt](app/src/main/java/com/example/gymprogress/ui/screens/StatsScreen.kt) оставить как точку входа с основным Scaffold и списками, подключая вынесенные composable. Публичный API `StatsScreen(...)` не менять.
+4. **`StatsScreen` дефолты**  
+   `scoringEngine: ScoringEngine = WorkoutScoreCalculator` при `scoringSystem: ScoringSystem = ScoringSystem.SIMPLIFIED` вводит в заблуждение в превью/тестах. **Согласовать дефолты** (например, `SimplifiedScoreCalculator` + `SIMPLIFIED`).
 
-**8. Опционально: разбить AddEntryDialog на под-композаблы**
-
-- Внутри [AddEntryDialog.kt](app/src/main/java/com/example/gymprogress/ui/screens/AddEntryDialog.kt) выделить, например, `AddEntryExercisePicker`, `AddEntrySetRows`, `AddEntryDateRow` и т.п., не меняя внешний контракт `AddEntryDialog(..., onConfirm)`. Это уменьшит размер одного composable и упростит чтение.
-
----
-
-### Фаза 3: Опциональные архитектурные шаги (если нужна ещё большая ясность)
-
-**9. Слой Repository (опционально)**
-
-- Ввести, например, `WorkoutRepository` (обёртка над WorkoutDao) и `ExerciseRepository` (над ExerciseDao): все вызовы `workoutDao.`* / `exerciseDao.`* из ViewModel идут через репозитории. Сигнатуры публичного API ViewModel не менять — только перенаправление вызовов. Это улучшит тестируемость и явно разделит «источник данных» и «логика экрана», без смены бизнес-логики.
-
-**10. TrainerRecommendationEngine (опционально)**
-
-- Оставить один класс; при желании разбить на несколько внутренних `object` или extension-файлов по зонам ответственности (например, выбор дня, делоад, построение списка упражнений), не меняя публичный `generateRecommendation` и `getAlternatives`. Либо просто добавить секционные комментарии в начале приватных методов для навигации по файлу.
+5. **Локальные `DateTimeFormatter` в UI**  
+   В [JournalScreen.kt](app/src/main/java/com/example/gymprogress/ui/screens/JournalScreen.kt) остаются паттерны `"d MMMM"`, `"EEEE"` — опционально вынести в `FormatUtils` с `Locale` для единообразия.
 
 ---
 
-## Что не менять (чтобы не сломать прод)
+## Эффективность и надёжность
 
-- Схему и миграции Room менять можно только с новой миграцией; при изменении хранения дат — миграция обязана сохранять все существующие записи (см. раздел «Даты и миграции» выше).
-- Публичные контракты экранов (параметры `JournalScreen`, `StatsScreen`, `AddEntryDialog` и т.д.) — можно добавлять необязательные параметры, не ломая существующие вызовы.
-- Алгоритмы в [WorkoutScoreCalculator](app/src/main/java/com/example/gymprogress/data/WorkoutScoreCalculator.kt) и [TrainerRecommendationEngine](app/src/main/java/com/example/gymprogress/data/TrainerRecommendationEngine.kt) (формулы, коэффициенты, целевые диапазоны).
-- Логику определения «сегодня» и способ сохранения завершённых подходов (только перенос из MainActivity в ViewModel без изменения правил группировки).
+1. **`saveCompletedWorkout`**  
+   Для каждой группы вызывается `addEntry`, а тот делает **отдельный** `launch` + `insert`. При нескольких упражнениях/весах — много параллельных транзакций и неатомарность «одна тренировка».  
+   **План:** собрать список `WorkoutEntry` и вставить в одной `@Transaction` в DAO (`insertAll`) или одном `runBlocking`/`withContext` с одной корутиной и последовательными insert в рамках транзакции Room.
 
----
+2. **`getAllEntries()`: `ORDER BY date DESC`** ([WorkoutDao.kt](app/src/main/java/com/example/gymprogress/data/WorkoutDao.kt))  
+   В [AGENTS.md](../../AGENTS.md) зафиксирован порядок **старые сверху** (`date ASC`, `id ASC`). Сейчас экраны частично **пересортировывают** сами (например, журнал — `sortedTodayEntries`).  
+   **План:** проверить все потребители `allEntries`; привести к одному контракту (либо менять запрос + поправить места, где нужен обратный порядок, либо явно документировать «DAO отдаёт DESC, UI нормализует»).
 
-## Порядок внедрения
+3. **Дублирование `combine` в ViewModel**  
+   `journalSessionState` и `previousSessionDayMuscleGroups` оба тянут `trainerSettings`, `allEntries`, `allExercises`, `_journalSelectedDayIndex` — часть вычислений дня сплита повторяется. **План:** один производный `StateFlow` с data class сессии журнала + производные `map`, чтобы реже вызывать `findNextDaySessionInSplit` / `getNextDayIndex`.
 
-```mermaid
-flowchart LR
-  subgraph phase1 [Фаза 1]
-    A[Даты в FormatUtils]
-    B[Навигация/Ещё из MainActivity]
-    C[NavState + resolveActiveWorkout]
-    D[saveCompletedWorkout в VM]
-    E[errorMessage + Snackbar]
-  end
-  subgraph phase2 [Фаза 2]
-    F[EditEntryDialog в отдельный файл]
-    G[StatsScreen разбить]
-    H[AddEntryDialog под-композаблы]
-  end
-  subgraph phase3 [Фаза 3]
-    I[Repository слой]
-    J[TrainerRecommendationEngine структура]
-  end
-  phase1 --> phase2
-  phase2 --> phase3
-```
-
-
-
-- Сначала выполнить фазу 1 (п. 1–5): централизация дат, вынос навигации/меню, группировка NavState, перенос saveCompletedWorkout, ошибки в UI. После каждого шага — прогон сценариев (журнал, добавление/редактирование записи, тренер, активная тренировка, настройки).
-- Затем фазу 2 (п. 6–8): разбиение экранов и диалогов без изменения контрактов.
-- Фазу 3 делать по желанию для дальнейшего упрощения поддержки и тестов.
+4. **Самоимпорт в [SimplifiedScoreCalculator.kt](app/src/main/java/com/example/gymprogress/data/SimplifiedScoreCalculator.kt)**  
+   Строка `import …SimplifiedScoreCalculator.calcE1RMForEntry` выглядит как артефакт — **убрать**, вызывать метод объекта без лишнего импорта.
 
 ---
 
-## Краткий итог
+## Фазы рефакторинга (обновлённый порядок)
 
+### Фаза A — низкий риск, быстрый выигрыш
 
-| Проблема                                   | Решение                                                                 | Риск                                 |
-| ------------------------------------------ | ----------------------------------------------------------------------- | ------------------------------------ |
-| Дублирование форматов дат в 6 местах       | Централизация в FormatUtils (или миграция на Long с сохранением данных) | Низкий при миграции с проверкой      |
-| MainActivity перегружен флагами и меню     | NavState + вынос scaffold/меню                                          | Низкий                               |
-| Логика saveCompletedSets в UI              | Перенос в ViewModel.saveCompletedWorkout                                | Низкий                               |
-| Нет отображения ошибок БД пользователю     | errorMessage + Snackbar                                                 | Низкий                               |
-| StatsScreen 1370 строк                     | Вынести Help и компоненты в отдельные файлы                             | Низкий                               |
-| JournalScreen 710 + EditEntryDialog внутри | Вынести EditEntryDialog в свой файл                                     | Низкий                               |
-| Один огромный ViewModel без репозиториев   | Опционально Repository                                                  | Средний (только рефакторинг вызовов) |
+- Удалить неиспользуемые API и параметры (таблица «Мёртвый код»).
+- Согласовать дефолты `StatsScreen` / `StatsComponents` для превью.
+- Почистить `SimplifiedScoreCalculator` import.
 
+### Фаза B — читаемость без смены поведения
 
-Бизнес-логику и контракты с продом не меняем; улучшаем только структуру, читаемость и обратную связь по ошибкам. Изменение формата или способа хранения дат допускается при условии миграции, которая гарантирует сохранность истории тренировок у существующих пользователей.
+- `AppOverlayState` или sealed «fullscreen» в `GymProgressApp`.
+- `safeDb` / общий обработчик ошибок в `WorkoutViewModel`.
+- Опционально: русские форматы дат из `JournalScreen` → `FormatUtils`.
+
+### Фаза C — надёжность и производительность
+
+- Транзакционное сохранение завершённой тренировки.
+- Ревизия сортировки `getAllEntries` и всех списков (согласование с AGENTS.md).
+- Объединение дублирующих `combine` для журнала.
+
+### Фаза D — по желанию
+
+- Разбиение `TrainerRecommendationEngine` на несколько файлов.
+- Слой `WorkoutRepository` / `ExerciseRepository` для тестов и единой точки доступа к БД.
+- Миграция дат на `Long` (epoch day) — только при отдельном ТЗ и тщательной миграции (см. [POTENTIAL_ERRORS_ANALYSIS.md](../../docs/POTENTIAL_ERRORS_ANALYSIS.md)).
+
+---
+
+## Что не ломать без явной цели
+
+- Публичные контракты экранов и алгоритмы скоринга / тренера.
+- Схему Room без новой миграции и проверки данных.
+- Единый `WorkoutViewModel` как источник правды для экранов.
+
+---
+
+## Краткая таблица
+
+| Проблема | Решение | Риск |
+|----------|---------|------|
+| Неиспользуемые поля/методы ViewModel и параметры Composable | Удалить или подключить в UI | Низкий |
+| Много отдельных `insert` после тренировки | Транзакция / batch insert | Низкий при тестах |
+| Разный порядок дат DAO vs правила AGENTS | Единый контракт + правки сортировки | Средний — регрессия UI |
+| Огромный `TrainerRecommendationEngine` | Несколько файлов, тот же API | Низкий |
+| Дублирование catch в ViewModel | `safeDb` helper | Низкий |
+| Перегруз `GymProgressApp` флагами | Sealed / data class навигации | Низкий |

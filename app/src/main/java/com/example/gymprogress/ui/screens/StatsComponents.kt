@@ -52,10 +52,10 @@ import com.example.gymprogress.data.FormatUtils
 import com.example.gymprogress.data.MuscleGroup
 import com.example.gymprogress.data.ProgressStatus
 import com.example.gymprogress.data.ScoringEngine
+import com.example.gymprogress.data.SimplifiedScoreCalculator
 import com.example.gymprogress.data.TrainingGoal
 import com.example.gymprogress.data.WorkoutDayReport
 import com.example.gymprogress.data.WorkoutEntry
-import com.example.gymprogress.data.WorkoutScoreCalculator
 import com.example.gymprogress.ui.theme.CardShape
 import com.example.gymprogress.ui.theme.CardShapeSmall
 import com.example.gymprogress.ui.theme.Spacing
@@ -628,7 +628,7 @@ internal fun WorkoutDaySection(
     selectedMuscleGroup: MuscleGroup?,
     onMuscleGroupSelected: (MuscleGroup) -> Unit,
     trainingGoal: TrainingGoal,
-    scoringEngine: ScoringEngine = WorkoutScoreCalculator,
+    scoringEngine: ScoringEngine = SimplifiedScoreCalculator,
     bodyWeightKg: Double? = null,
     isSimplified: Boolean = false
 ) {
