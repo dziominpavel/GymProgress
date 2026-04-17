@@ -440,7 +440,7 @@ score = (rawMetric − fatiguePenalty × 10).coerceIn(0, 1000)
 
 | Цель | Метрика | Описание |
 |------|---------|----------|
-| Сила | E1RM | Формула Epley по лучшему подходу: `weight × (1 + reps/30)`, reps cap 15 |
+| Сила | E1RM | Гибридная формула (Epley до 10 повторов, Brzycki выше) с бонусом за объём: `weight × (1 + reps/30)` или `weight × 36/(37−reps)` |
 | Выносливость | Объём | `volume = weight × totalReps` |
 
 Балл: `(metric / yourBest) × 100 − fatiguePenalty × 10`, cap 0–1000.

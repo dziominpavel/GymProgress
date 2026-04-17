@@ -28,7 +28,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import com.example.gymprogress.ui.theme.Volt
@@ -105,7 +104,7 @@ internal fun ScoreFormulaHelpDialog(onDismiss: () -> Unit) {
                     Spacer(modifier = Modifier.height(6.dp))
 
                     HelpHeader("🎯 Сила и выносливость")
-                    HelpRow("Сила", "E1RM = оценочный 1RM по лучшему подходу (Epley)")
+                    HelpRow("Сила", "E1RM = оценочный 1RM по лучшему подходу (гибрид Epley/Brzycki)")
                     HelpRow("Выносливость", "Объём = вес × сумма повторений")
                     Spacer(modifier = Modifier.height(20.dp))
 
@@ -258,7 +257,7 @@ internal fun SimplifiedHelpDialog(onDismiss: () -> Unit) {
                     Text("Оценочный одноразовый максимум (Estimated 1RM) — это расчётный вес, который вы могли бы поднять ровно 1 раз. Он вычисляется из ваших рабочих подходов.",
                         style = MaterialTheme.typography.bodySmall)
                     Spacer(modifier = Modifier.height(8.dp))
-                    HelpFormula("E1RM = вес × (1 + повторения / 30)\nФормула Epley — одна из самых проверенных")
+                    HelpFormula("≤ 10 повторов: Epley = вес × (1 + повторы/30)\n> 10 повторов: Brzycki = вес × 36/(37−повторы)\nГибрид даёт точность на всех диапазонах")
                     Spacer(modifier = Modifier.height(20.dp))
 
                     HelpHeader("📊 Оценочный и базовый 1RM")

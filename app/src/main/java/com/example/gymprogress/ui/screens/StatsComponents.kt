@@ -251,7 +251,7 @@ internal fun ScoreDetailDialog(
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    if (isSimplified) "Оценочный 1RM · Epley"
+                    if (isSimplified) "Оценочный 1RM"
                     else "${d.goalName} \u00B7 ${d.exerciseTypeName} \u00B7 ${d.targetRange} повт.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant

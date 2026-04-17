@@ -24,10 +24,10 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -410,8 +410,8 @@ fun SettingsScreen(
                         text = if (currentScoringSystem == ScoringSystem.SIMPLIFIED) {
                             "Упрощённая система:\n" +
                             "• Оценочный 1RM (кг) — максимальный вес на 1 повторение\n" +
-                            "• Формула Epley с учётом лестницы усилия\n" +
-                            "• Последний подход считается ближе к отказу\n" +
+                            "• Гибридная формула (Epley до 10 повторов, Brzycki выше)\n" +
+                            "• Бонус за подтверждающие подходы (до +5%)\n" +
                             "• Прогресс = рост/падение 1RM во времени"
                         } else {
                             "Усложнённая система:\n" +

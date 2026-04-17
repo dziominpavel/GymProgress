@@ -8,7 +8,14 @@ import kotlin.math.max
  * Упрощённая методика оценки прогресса.
  *
  * Основная метрика: оценочный одноразовый максимум (Estimated 1RM) в кг.
- * Формула Epley: E1RM = weight × (1 + reps / 30)
+ *
+ * ## Формула для одного подхода (гибрид Epley + Brzycki)
+ * - reps ≤ 10: Epley           E1RM = weight × (1 + reps / 30)
+ * - reps > 10: Brzycki          E1RM = weight × 36 / (37 − reps)   (reps капается на 15)
+ *
+ * Формулы пересекаются ровно при reps = 10 (обе дают множитель 1.333), поэтому
+ * переход плавный. Epley проще и хорошо откалибрована на 1–10 reps; Brzycki
+ * точнее на 11–15 reps, где Epley начинает завышать 1RM.
  *
  * ## Лестница усилия (Effort Ladder)
  * RIR не вводится пользователем. Допущение: последний рабочий подход ближе к отказу,
@@ -22,7 +29,18 @@ import kotlin.math.max
  * - Четвёртый+:      коэфф. 0.91
  *
  * adjusted_E1RM = raw_E1RM × коэфф.
- * Итоговый E1RM сессии = максимум среди всех подходов.
+ *
+ * ## Итоговый E1RM сессии
+ * 1. best = максимум adjusted_E1RM среди всех подходов.
+ * 2. Бонус за подтверждающие подходы: каждый подход с adjusted_E1RM ≥ 95% от best
+ *    добавляет +1.5% к итогу, но не более +5% суммарно. Это решает проблему
+ *    «1×5 = 5×5»: повторяемый результат оценивается выше одиночного.
+ * 3. Умный штраф за усталость: если лучший подход был НЕ последним, применяется
+ *    половинный fatiguePenalty (просадка reps first→last). Логика: лучший результат
+ *    в начале + развал к концу = первый подход был ближе к отказу, чем считает формула,
+ *    значит E1RM слегка завышен. Если лучший подход = последний — штраф не применяется.
+ *
+ * final_E1RM = best × (1 + volumeBonus) × (1 − smartFatiguePenalty)
  *
  * ## Расширяемость
  * Коэффициенты лестницы вынесены в EffortProfile. В будущем пользователь сможет
@@ -35,8 +53,8 @@ import kotlin.math.max
  * bodyWeightKg нужен только для проверки что вес тела указан; без него → E1RM = 0.
  *
  * ## Краевые случаи
- * - 1 подход → E1RM по единственному подходу, RIR = 1
- * - Очень много повторений (>30) → формула Epley нестабильна, капаем на 30
+ * - 1 подход → E1RM по единственному подходу, бонус за подтверждение = 0
+ * - Очень много повторений (>30) → капаем на 30; Brzycki дополнительно капается на 15
  * - Вес = 0, не BW → E1RM = 0
  * - Несколько записей одного упражнения на одну дату → каждая оценивается отдельно,
  *   для прогресса берётся лучшая за дату
@@ -46,6 +64,17 @@ object SimplifiedScoreCalculator : ScoringEngine {
     private const val TREND_SIZE = 3
     private const val PROGRESS_THRESHOLD_PCT = 5.0
     private const val MAX_REPS_FOR_E1RM = 30
+    private const val BRZYCKI_MAX_REPS = 15
+    private const val EPLEY_BRZYCKI_CROSSOVER = 10
+
+    /** Порог «подтверждения»: подход засчитывается, если его adjusted_E1RM ≥ этой доли от лучшего. */
+    private const val CONFIRMATION_THRESHOLD = 0.95
+    /** Прирост за каждый дополнительный подтверждающий подход (сверх первого). */
+    private const val VOLUME_BONUS_PER_SET = 0.015
+    /** Верхний предел бонуса за подтверждение (5%). */
+    private const val MAX_VOLUME_BONUS = 0.05
+    /** Доля fatiguePenalty, применяемая к E1RM (половина, чтобы не обнулять рекорд). */
+    private const val FATIGUE_E1RM_FACTOR = 0.5
 
     /**
      * Профиль усилия: задаёт коэффициент корректировки E1RM для каждого подхода
@@ -72,12 +101,25 @@ object SimplifiedScoreCalculator : ScoringEngine {
 
     // ── E1RM расчёт ──────────────────────────────────────────────────────
 
-    /** Epley E1RM для одного подхода */
-    private fun epleyE1RM(weight: Double, reps: Int): Double {
+    /**
+     * Оценочный 1RM для одного подхода (гибрид Epley + Brzycki).
+     * - reps ≤ 10 — формула Epley: weight × (1 + reps/30).
+     * - reps > 10 — формула Brzycki: weight × 36 / (37 − reps), reps капается на 15
+     *   чтобы знаменатель не стремился к нулю.
+     * На границе reps = 10 обе формулы дают один и тот же множитель 1.333,
+     * поэтому переход без разрыва.
+     */
+    private fun repMaxPerSet(weight: Double, reps: Int): Double {
         if (weight <= 0 || reps <= 0) return 0.0
         val cappedReps = reps.coerceAtMost(MAX_REPS_FOR_E1RM)
-        return if (cappedReps == 1) weight
-        else weight * (1.0 + cappedReps / 30.0)
+        return when {
+            cappedReps == 1 -> weight
+            cappedReps <= EPLEY_BRZYCKI_CROSSOVER -> weight * (1.0 + cappedReps / 30.0)
+            else -> {
+                val brzyckiReps = cappedReps.coerceAtMost(BRZYCKI_MAX_REPS)
+                weight * 36.0 / (37.0 - brzyckiReps)
+            }
+        }
     }
 
     /**
@@ -92,14 +134,25 @@ object SimplifiedScoreCalculator : ScoringEngine {
         positionFromEnd: Int,
         profile: EffortProfile = STANDARD_EFFORT
     ): Double {
-        val raw = epleyE1RM(weight, reps)
+        val raw = repMaxPerSet(weight, reps)
         val coeff = profile.coefficientForPosition(positionFromEnd)
         return raw * coeff
     }
 
     /**
-     * E1RM сессии: максимум среди скорректированных E1RM всех подходов.
+     * E1RM сессии с учётом бонуса за подтверждение и умного штрафа за усталость.
      * Для BW-упражнений weight уже должен быть effectiveWeight.
+     *
+     * Шаги:
+     * 1. raw[i] = repMaxPerSet(w, reps[i]); adjusted[i] = raw[i] × коэфф_лестницы(position).
+     * 2. best = max(adjusted) — используется как основа итогового E1RM (лестница
+     *    отражает «уверенность» в оценке подхода).
+     * 3. confirmingSets = количество подходов с raw[i] ≥ max(raw) × 0.95.
+     *    Считается по **raw** (без лестницы), потому что одинаковые рабочие подходы
+     *    должны подтверждать результат независимо от их позиции в сессии.
+     * 4. volumeBonus = min(0.05, 0.015 × (confirmingSets − 1)).
+     * 5. Если индекс best ≠ последний → smartPenalty = fatiguePenalty × 0.5, иначе 0.
+     * 6. final = best × (1 + volumeBonus) × (1 − smartPenalty).
      */
     fun calcE1RMForEntry(
         entry: WorkoutEntry,
@@ -112,10 +165,33 @@ object SimplifiedScoreCalculator : ScoringEngine {
         val effectiveWeight = effectiveWeight(entry, bodyWeightKg, isBodyweightExercise)
         if (effectiveWeight <= 0) return 0.0
 
-        return reps.mapIndexed { index, rep ->
+        val raw = reps.map { repMaxPerSet(effectiveWeight, it) }
+        val adjusted = reps.mapIndexed { index, rep ->
             val positionFromEnd = reps.size - 1 - index
             adjustedE1RM(effectiveWeight, rep, positionFromEnd, profile)
-        }.maxOrNull() ?: 0.0
+        }
+        val best = adjusted.maxOrNull() ?: return 0.0
+        if (best <= 0) return 0.0
+        val bestRaw = raw.maxOrNull() ?: return 0.0
+        if (bestRaw <= 0) return 0.0
+
+        // Улучшение 2: бонус за повторяемый результат (до +5%).
+        // Сравнение по raw, чтобы одинаковые рабочие подходы считались подтверждающими,
+        // а не отфильтровывались лестницей усилия.
+        val confirmingSets = raw.count { it >= bestRaw * CONFIRMATION_THRESHOLD }
+        val extraConfirming = (confirmingSets - 1).coerceAtLeast(0)
+        val volumeBonus = minOf(MAX_VOLUME_BONUS, VOLUME_BONUS_PER_SET * extraConfirming)
+
+        // Улучшение 3: умный штраф за усталость.
+        // Применяется только если лучший подход был не последним (первый сет «тяжелее» финального —
+        // признак того, что он был ближе к отказу, чем предполагает формула).
+        val bestIndex = adjusted.indexOfLast { it == best }
+        val lastIndex = adjusted.size - 1
+        val smartPenalty = if (bestIndex < lastIndex) {
+            calcFatiguePenalty(reps) * FATIGUE_E1RM_FACTOR
+        } else 0.0
+
+        return best * (1.0 + volumeBonus) * (1.0 - smartPenalty)
     }
 
     /**
@@ -196,8 +272,10 @@ object SimplifiedScoreCalculator : ScoringEngine {
         } ?: e1rm
         val bestForScore = max(bestE1RM, e1rm)
 
+        // Штраф за усталость уже учтён внутри E1RM (умный штраф, если лучший подход не последний),
+        // поэтому дополнительно в score его не применяем — иначе получим двойное наказание.
         val rawScore = if (bestForScore > 0) (e1rm / bestForScore) * 100.0 else 0.0
-        val score = (rawScore - fatiguePenalty * 10).toInt().coerceIn(0, 1000)
+        val score = rawScore.toInt().coerceIn(0, 1000)
 
         val components = ScoreComponents(
             metricValue = e1rm,

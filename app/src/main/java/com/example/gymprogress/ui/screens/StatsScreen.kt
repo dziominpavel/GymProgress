@@ -387,7 +387,7 @@ fun StatsScreen(
                             .padding(horizontal = Spacing.xs, vertical = 2.dp)
                     ) {
                         Text(
-                            text = if (isSimplified) "1RM · Epley"
+                            text = if (isSimplified) "1RM"
                                    else "${exerciseType.displayName} · ${trainingGoal.targetRange.first}–${trainingGoal.targetRange.last} повт.",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant

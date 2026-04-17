@@ -142,16 +142,22 @@ object WorkoutScoreCalculator : ScoringEngine {
         return if (reps.isEmpty()) 0.0 else entry.weight * reps.sum()
     }
 
-    /** E1RM по лучшему подходу (формула Epley), для силы. reps > 12 дают нестабильный E1RM — ограничиваем. */
+    /** E1RM по лучшему подходу (гибрид Epley/Brzycki), для силы. */
     private fun calcE1RM(entry: WorkoutEntry): Double {
         val reps = parseReps(entry)
         if (reps.isEmpty()) return 0.0
         val bestSet = reps.maxOrNull() ?: return 0.0
         val weight = entry.weight
         if (weight <= 0) return 0.0
-        // Epley: E1RM = weight * (1 + reps/30). Для reps > 15 формула менее точна — кэпируем
-        val cappedReps = minOf(bestSet, 15)
-        return weight * (1.0 + cappedReps / 30.0)
+        val cappedReps = minOf(bestSet, 30)
+        return when {
+            cappedReps == 1 -> weight
+            cappedReps <= 10 -> weight * (1.0 + cappedReps / 30.0)
+            else -> {
+                val brzyckiReps = minOf(cappedReps, 15)
+                weight * 36.0 / (37.0 - brzyckiReps)
+            }
+        }
     }
 
     /** Total reps (выносливость) */
