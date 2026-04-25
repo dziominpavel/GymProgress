@@ -18,7 +18,7 @@ alwaysApply: false
 - DataStore Preferences для цели тренировки, веса тела, настроек Тренера (тип сплита, дни, приоритет групп, разминка, делоад, тип прогрессии). Чтение — Flow, запись — suspend-функции.
 
 ## Алгоритмы
-- `WorkoutScoreCalculator`: по `docs/TRAINING_PROGRESS_ALGORITHM_PLAN.md` — объём, интенсивность, качество повторений, fatigue penalty; коэффициенты по цели и типу упражнения (compound/isolation).
+- Скоринг: две системы (`SimplifiedScoreCalculator` и `WorkoutScoreCalculator`), общий интерфейс `ScoringEngine`, выбор через `ScoringSystem`. Описание актуального поведения — `docs/TRAINING_SCORING_REFERENCE.md`.
 - `TrainerRecommendationEngine`: вход — настройки, цель, упражнения, история; выход — `WorkoutRecommendation` (день, группы мышц, список упражнений с подходами/весами/повторениями).
 
 ## AiService

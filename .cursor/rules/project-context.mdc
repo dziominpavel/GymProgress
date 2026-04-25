@@ -16,19 +16,20 @@ Android-приложение на **Kotlin** для учёта силовых т
 ## Ключевые пути
 - Точка входа: `MainActivity` → `GymProgressApp(viewModel)`
 - Экраны: `app/src/main/java/com/example/gymprogress/ui/screens/*.kt`
-- Тема и компоненты: `ui/theme/`, `ui/components/` (GymCard, MuscleGroupIcon и т.д.)
-- Данные: `data/` — Room (AppDatabase, WorkoutDao, ExerciseDao), SettingsRepository, TrainerRecommendationEngine, WorkoutScoreCalculator, AiService
+- Тема: `ui/theme/` (Color/Type/Shape/Dimens/Theme); компоненты: `ui/components/` (пока только `MuscleGroupIcon`)
+- Данные: `data/` — Room (AppDatabase, WorkoutDao, ExerciseDao), SettingsRepository, TrainerRecommendationEngine, две системы скоринга (`SimplifiedScoreCalculator`, `WorkoutScoreCalculator`) поверх `ScoringEngine`, AiService
 - Версия: `version.properties`; при assemble/install/bundle автоматически увеличивается patch
 
 ## Документация (обязательно учитывать)
-- `docs/DESIGN_SYSTEM.md` — дизайн-система: цвета (оранжевый акцент), типографика (Roboto), отступы (4dp grid), компоненты (GymCard, GymSectionHeader, empty/loading/error states)
-- `docs/TRAINING_PROGRESS_ALGORITHM_PLAN.md` — алгоритм скоринга тренировок (объём, интенсивность, качество повторений, fatigue penalty)
-- `docs/POTENTIAL_ERRORS_ANALYSIS.md` — известные риски: сортировка дат как строк, destructive migration, связь записей с упражнениями, дубликаты имён, обработка ошибок в ViewModel
+- `docs/DESIGN_SYSTEM.md` — дизайн-система IRON CORE: акцент Volt (`#D1FF00`) на тёмной палитре Obsidian/Carbon, типографика Roboto, токены `Spacing`/`Dimens`/`CardShape`/`FabShape`. Общих компонентов `GymCard`/`GymPrimaryButton` нет.
+- `docs/TRAINING_SCORING_REFERENCE.md` — две системы скоринга: упрощённая (E1RM по Epley/Brzycki + лестница усилия + бонус за подтверждение) и усложнённая (composite stimulus / E1RM / volume по цели).
+- `docs/POTENTIAL_ERRORS_ANALYSIS.md` — текущий технический долг: нет FK на `Exercise`, case-sensitive уникальность имён, пустые правила Auto Backup, мёртвый код `exerciseNames`, активная тренировка без foreground service.
+- `docs/IMPROVEMENT_PLAN.md` — общий план улучшений (бэкап, UX, графики, дизайн, навигация, a11y, техдолг).
 
 ## Секреты
 - `OPENROUTER_API_KEY` — из `local.properties`, попадает в `BuildConfig`; для AI-советов в Тренере.
 
 ## При изменениях
 - Room: при смене схемы добавлять миграцию в `AppDatabase`, не полагаться на destructive migration в release.
-- UI: использовать токены из `GymTheme`, `Spacing`, `Dimens` и компоненты из дизайн-системы.
+- UI: использовать токены `MaterialTheme.colorScheme`, `GymTheme.colors`, `Spacing`, `Dimens`, `CardShape`/`FabShape`/`ButtonShape`. Не вводить inline `Color(0xFF...)`, `.dp` и `RoundedCornerShape(...)` в новых местах.
 - Новые экраны: получать данные и колбэки от `WorkoutViewModel`, не дублировать бизнес-логику в Composable.
