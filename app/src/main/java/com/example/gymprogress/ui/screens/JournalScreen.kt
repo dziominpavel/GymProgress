@@ -25,6 +25,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -36,13 +37,18 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -57,10 +63,12 @@ import com.example.gymprogress.data.MuscleGroup
 import com.example.gymprogress.data.WorkoutEntry
 import com.example.gymprogress.data.WorkoutRecommendation
 import com.example.gymprogress.ui.components.MuscleGroupIcon
+import com.example.gymprogress.ui.components.rememberHaptics
 import com.example.gymprogress.ui.theme.CardShape
 import com.example.gymprogress.ui.theme.FabShape
 import com.example.gymprogress.ui.theme.Spacing
 import com.example.gymprogress.ui.theme.Volt
+import kotlinx.coroutines.launch
 import java.time.LocalDate
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
@@ -77,15 +85,39 @@ fun JournalScreen(
     selectedDayIndex: Int?,
     onSelectDay: (Int?) -> Unit,
     workoutRecommendation: WorkoutRecommendation?,
+    personalRecordEntryIds: Set<Long>,
     onAddClick: () -> Unit,
     onQuickAdd: (exerciseName: String) -> Unit,
     onOpenTrainer: () -> Unit,
     onDeleteEntry: (WorkoutEntry) -> Unit,
     onUpdateEntry: (WorkoutEntry) -> Unit,
+    onRepeatEntry: (WorkoutEntry) -> Unit,
     modifier: Modifier = Modifier
 ) {
     var selectedEntry by remember { mutableStateOf<WorkoutEntry?>(null) }
     var entryToEdit by remember { mutableStateOf<WorkoutEntry?>(null) }
+
+    // Pending soft-delete: запись скрывается из UI и удаляется реально через 5 сек,
+    // если пользователь не нажал «Отменить» в Snackbar. Локальный state — на время сессии экрана.
+    val pendingDelete = remember { mutableStateMapOf<Long, WorkoutEntry>() }
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+
+    fun requestDeleteWithUndo(entry: WorkoutEntry) {
+        pendingDelete[entry.id] = entry
+        scope.launch {
+            val result = snackbarHostState.showSnackbar(
+                message = "Запись удалена",
+                actionLabel = "Отменить",
+                duration = androidx.compose.material3.SnackbarDuration.Short,
+                withDismissAction = false
+            )
+            val pending = pendingDelete.remove(entry.id) ?: return@launch
+            if (result != SnackbarResult.ActionPerformed) {
+                onDeleteEntry(pending)
+            }
+        }
+    }
 
     val todayLabel = remember {
         FormatUtils.formatJournalDayMonth(LocalDate.now())
@@ -115,20 +147,31 @@ fun JournalScreen(
 
     val hasAnyContent = workoutRecommendation != null || previousExercises.isNotEmpty() || entries.isNotEmpty() || previousSessionDayLabel != null
 
-    val sortedTodayEntries = remember(entries) {
-        entries.sortedWith(
+    val visibleTodayEntries = remember(entries, pendingDelete) {
+        entries.filter { it.id !in pendingDelete }
+    }
+    val visiblePreviousExercises = remember(previousExercises, pendingDelete) {
+        previousExercises.filter { it.id !in pendingDelete }
+    }
+    val sortedTodayEntries = remember(visibleTodayEntries) {
+        visibleTodayEntries.sortedWith(
             compareBy<WorkoutEntry> {
                 FormatUtils.parseStorageDate(it.date) ?: LocalDate.MIN
             }.thenBy { it.id }
         )
     }
 
+    val haptics = rememberHaptics()
     Scaffold(
         modifier = modifier,
         containerColor = MaterialTheme.colorScheme.background,
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         floatingActionButton = {
             FloatingActionButton(
-                onClick = onAddClick,
+                onClick = {
+                    haptics.tap()
+                    onAddClick()
+                },
                 containerColor = Volt,
                 contentColor = MaterialTheme.colorScheme.onPrimary,
                 shape = FabShape,
@@ -162,7 +205,7 @@ fun JournalScreen(
             )
             Spacer(modifier = Modifier.height(Spacing.xs))
             Text(
-                text = if (entries.isEmpty()) todayLabel else "$todayLabel · ${entries.size} записей",
+                text = if (visibleTodayEntries.isEmpty()) todayLabel else "$todayLabel · ${visibleTodayEntries.size} записей",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -241,7 +284,7 @@ fun JournalScreen(
                                 }
                                 SectionHeader(
                                     title = previousSessionDayLabel,
-                                    count = previousExercises.size,
+                                    count = visiblePreviousExercises.size,
                                     modifier = Modifier.fillMaxWidth()
                                 )
                                 if (previousSessionDayMuscleGroups.isNotEmpty()) {
@@ -255,12 +298,13 @@ fun JournalScreen(
                                 }
                             }
                         }
-                        if (previousExercises.isNotEmpty()) {
-                            items(previousExercises, key = { "prev_${it.exerciseName}" }) { entry ->
+                        if (visiblePreviousExercises.isNotEmpty()) {
+                            items(visiblePreviousExercises, key = { "prev_${it.exerciseName}" }) { entry ->
                                 val exercise = exercises.find { it.name == entry.exerciseName }
                                 PreviousSessionExerciseRow(
                                     entry = entry,
                                     exercise = exercise,
+                                    isPersonalRecord = entry.id in personalRecordEntryIds,
                                     onQuickAdd = onQuickAdd
                                 )
                             }
@@ -271,12 +315,12 @@ fun JournalScreen(
                     stickyHeader(key = "today_header") {
                         SectionHeader(
                             title = "Сегодня",
-                            count = entries.size,
+                            count = visibleTodayEntries.size,
                             modifier = Modifier.background(MaterialTheme.colorScheme.background)
                         )
                     }
 
-                    if (entries.isEmpty()) {
+                    if (visibleTodayEntries.isEmpty()) {
                         item(key = "today_empty") {
                             Box(
                                 modifier = Modifier
@@ -285,7 +329,7 @@ fun JournalScreen(
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
-                                    text = if (previousExercises.isNotEmpty())
+                                    text = if (visiblePreviousExercises.isNotEmpty())
                                         "Нажмите «+» рядом с упражнением или добавьте новое"
                                     else
                                         "Нажмите + чтобы добавить первое упражнение",
@@ -300,6 +344,7 @@ fun JournalScreen(
                         items(sortedTodayEntries, key = { it.id }) { entry ->
                             WorkoutEntryCard(
                                 entry = entry,
+                                isPersonalRecord = entry.id in personalRecordEntryIds,
                                 onLongClick = { selectedEntry = entry }
                             )
                         }
@@ -331,28 +376,37 @@ fun JournalScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Spacer(modifier = Modifier.height(24.dp))
-                    Row(
+                    Column(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
+                        TextButton(
+                            onClick = {
+                                onRepeatEntry(entry)
+                                selectedEntry = null
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Повторить сегодня")
+                        }
                         TextButton(
                             onClick = {
                                 selectedEntry = null
                                 entryToEdit = entry
                             },
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.fillMaxWidth()
                         ) {
                             Text("Редактировать")
                         }
                         TextButton(
                             onClick = {
-                                onDeleteEntry(entry)
+                                requestDeleteWithUndo(entry)
                                 selectedEntry = null
                             },
                             colors = ButtonDefaults.textButtonColors(
                                 contentColor = MaterialTheme.colorScheme.error
                             ),
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.fillMaxWidth()
                         ) {
                             Text("Удалить")
                         }
@@ -538,6 +592,7 @@ private fun PreviousSessionDaySelector(
 private fun PreviousSessionExerciseRow(
     entry: WorkoutEntry,
     exercise: Exercise?,
+    isPersonalRecord: Boolean,
     onQuickAdd: (String) -> Unit
 ) {
     val setsCount = remember(entry.reps) {
@@ -566,12 +621,24 @@ private fun PreviousSessionExerciseRow(
             )
             Spacer(modifier = Modifier.width(Spacing.sm))
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = entry.exerciseName,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = entry.exerciseName,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                    if (isPersonalRecord) {
+                        Spacer(modifier = Modifier.width(Spacing.xs))
+                        Icon(
+                            imageVector = Icons.Default.EmojiEvents,
+                            contentDescription = "Личный рекорд",
+                            tint = Volt,
+                            modifier = Modifier.size(14.dp)
+                        )
+                    }
+                }
                 Text(
                     text = "${FormatUtils.formatWeight(entry.weight)} кг · $setsCount подх.",
                     style = MaterialTheme.typography.bodySmall,
@@ -603,6 +670,7 @@ private fun PreviousSessionExerciseRow(
 @Composable
 internal fun WorkoutEntryCard(
     entry: WorkoutEntry,
+    isPersonalRecord: Boolean = false,
     onLongClick: () -> Unit
 ) {
     val accentColor = Volt
@@ -670,12 +738,24 @@ internal fun WorkoutEntryCard(
                 Spacer(modifier = Modifier.width(Spacing.sm))
 
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = entry.exerciseName,
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = entry.exerciseName,
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.weight(1f, fill = false)
+                        )
+                        if (isPersonalRecord) {
+                            Spacer(modifier = Modifier.width(Spacing.xs))
+                            Icon(
+                                imageVector = Icons.Default.EmojiEvents,
+                                contentDescription = "Личный рекорд",
+                                tint = Volt,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
                     Spacer(modifier = Modifier.height(Spacing.xs))
                     val reps = remember(entry.reps) {
                         entry.reps.split(",")

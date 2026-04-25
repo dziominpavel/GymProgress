@@ -3,8 +3,8 @@ package com.example.gymprogress.data
 import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
-import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -28,6 +28,7 @@ class SettingsRepository(private val context: Context) {
     private val scoringSystemKey = stringPreferencesKey("scoring_system")
     private val heightCmKey = stringPreferencesKey("height_cm")
     private val genderKey = stringPreferencesKey("user_gender")
+    private val themeModeKey = stringPreferencesKey("theme_mode")
 
     val trainingGoal: Flow<TrainingGoal> = context.dataStore.data.map { prefs ->
         val name = prefs[goalKey] ?: TrainingGoal.HYPERTROPHY.name
@@ -87,6 +88,17 @@ class SettingsRepository(private val context: Context) {
         context.dataStore.edit { prefs ->
             if (value == null) prefs.remove(genderKey)
             else prefs[genderKey] = value.name
+        }
+    }
+
+    val themeMode: Flow<ThemeMode> = context.dataStore.data.map { prefs ->
+        val name = prefs[themeModeKey] ?: ThemeMode.SYSTEM.name
+        ThemeMode.entries.find { it.name == name } ?: ThemeMode.SYSTEM
+    }
+
+    suspend fun setThemeMode(mode: ThemeMode) {
+        context.dataStore.edit { prefs ->
+            prefs[themeModeKey] = mode.name
         }
     }
 

@@ -42,55 +42,31 @@ data/FormatUtils.kt:87-134     normalizeExerciseNameKey, findExerciseByStoredNam
 
 ---
 
-### 2. Уникальность упражнений case-sensitive и без UI-проверки (низкий-средний риск)
+### 2. Уникальность упражнений case-sensitive и без UI-проверки ⚠️ устранено частично (2026-04-25)
 
-**Где:**
-```
-data/Exercise.kt:7-10                  Index(value = ["name"], unique = true)
-data/ExerciseDao.kt:34-35              countByName(name) — есть, но не вызывается
-viewmodel/WorkoutViewModel.kt:308-324  addExercise() — без проверки countByName
-```
+**Что сделано:**
+- `ExerciseDao.countByNormalizedName(name, excludeId)` — `LOWER(TRIM(REPLACE(name, char(160), ' ')))` на стороне SQL.
+- `WorkoutViewModel.addExercise`/`updateExercise` проверяют `countByNormalizedName(normalizeExerciseNameKey(name))` до вставки и показывают понятное сообщение «Упражнение с таким именем уже есть» в Snackbar (через `errorMessage`).
+- Покрывает разные регистры и неразрывные пробелы.
 
-**Последствия:**
-- Индекс case-sensitive: «Жим лёжа», «жим лёжа» и «Жим лежа» с другим пробелом проходят как разные упражнения.
-- В UI перед вставкой проверка не выполняется. При попадании на duplicate возникает `SQLiteConstraintException`, которую `safeDb` показывает как «UNIQUE constraint failed: exercises.name» — нечитаемо для пользователя.
-- В коде уже есть `FormatUtils.normalizeExerciseNameKey()` и `countByName()` — нужна только связка их вместе.
-
-**Рекомендация:**
-- Сделать индекс `COLLATE NOCASE` (миграция: пересоздать таблицу/индекс) **или** добавить поле `nameKey: String` (`normalizeExerciseNameKey(name)`) и индекс UNIQUE на нём.
-- В `ExercisesScreen` перед вставкой/обновлением вызывать `exerciseDao.countByName(normalizedName)` и показывать понятное сообщение «Упражнение с таким именем уже есть».
-- В `safeDb` при ловле `SQLiteConstraintException` для таблицы `exercises` подставлять понятный текст.
+**Что осталось:**
+- Жёсткая защита на уровне СУБД (индекс `COLLATE NOCASE` или денормализованная колонка `nameKey`) — отложено до фазы 8.3 в `IMPROVEMENT_PLAN.md`, чтобы все миграции схемы были в одном релизе.
+- Маппинг `SQLiteConstraintException` в понятное сообщение пользователю (на случай race conditions, когда UI-проверка прошла, но за это время кто-то ещё вставил такое же имя).
+- Множественные пробелы внутри строки (например «Жим  лёжа» с двумя пробелами) — Kotlin-нормализация их сжимает, SQL-проверка нет. Очень редкий случай.
 
 ---
 
-### 3. Пустые правила Auto Backup (низкий риск, сейчас работает на defaults)
+### 3. Пустые правила Auto Backup ✅ устранено (2026-04-25)
 
-**Где:**
-```
-AndroidManifest.xml                   android:allowBackup="true", ссылки на оба XML
-res/xml/backup_rules.xml              <full-backup-content/> без include/exclude
-res/xml/data_extraction_rules.xml     <cloud-backup/>, <device-transfer/> закомментированы
-```
+`backup_rules.xml` и `data_extraction_rules.xml` заполнены явными `<include>` для БД Room (`gym_progress_db` + `-shm` / `-wal`) и DataStore (`files/datastore/`). В `data_extraction_rules.xml` присутствуют оба блока — `<cloud-backup>` и `<device-transfer>`.
 
-**Последствия:**
-- Auto Backup сейчас работает с дефолтным поведением Android (бэкапит большую часть `data/` приложения), но это не задокументировано явно и может перестать включать БД при будущих изменениях.
-- Нет тестового сценария «переустановил → данные восстановились».
-
-**Рекомендация:** см. `IMPROVEMENT_PLAN.md` фаза 1.1 — заполнить `<include>`-блоки для БД (`gym_progress_db`) и DataStore (`settings.preferences_pb`), проверить на тестовом устройстве.
+Осталась ручная проверка на устройстве (cценарий «переустановил → данные восстановились»).
 
 ---
 
-### 4. Мёртвый код в data-слое (низкий риск, чистка)
+### 4. Мёртвый код в data-слое ✅ устранено (2026-04-25)
 
-**Где:**
-```
-data/WorkoutDao.kt:30-31              getAllExerciseNames(): Flow<List<String>>
-viewmodel/WorkoutViewModel.kt:81-82   exerciseNames: StateFlow<List<String>>
-```
-
-`WorkoutViewModel.exerciseNames` объявлен как публичный `StateFlow`, но не используется ни в одном `@Composable`. Соответствующий DAO-метод также никем не вызывается.
-
-**Рекомендация:** удалить оба символа вместе с импортами. Уменьшит количество подписок на Room и упростит ViewModel.
+Удалены `WorkoutViewModel.exerciseNames` и `WorkoutDao.getAllExerciseNames()` — они нигде не использовались.
 
 ---
 
@@ -129,9 +105,9 @@ MainActivity.kt:255-274               showActiveWorkout overlay
 | # | Проблема | Риск | Размер правки | Связь с планом |
 |---|----------|------|---------------|----------------|
 | 1 | Нет FK на `Exercise` | средний | M | фаза 8.3, в связке с 1 |
-| 2 | Case-sensitive уникальность + нет UI-проверки | низкий-средний | S | фаза 8.2 |
-| 3 | Пустые правила Auto Backup | низкий | XS | фаза 1.1 |
-| 4 | Мёртвый код `exerciseNames` | низкий | XS | фаза 8.1 |
+| 2 | Case-sensitive уникальность + нет UI-проверки ⚠️ частично | низкий | S | UI-проверка готова, миграция СУБД — фаза 8.3 |
+| 3 | ~~Пустые правила Auto Backup~~ ✅ | — | — | устранено |
+| 4 | ~~Мёртвый код `exerciseNames`~~ ✅ | — | — | устранено |
 | 5 | AI-ошибка смешана с советом | низкий | S | новый пункт, можно добавить в фазу 2 |
 | 6 | Активная тренировка теряется при kill | средний | M | фаза 6.2 |
 

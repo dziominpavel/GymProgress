@@ -28,6 +28,8 @@ import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
@@ -73,6 +75,7 @@ import com.example.gymprogress.data.SimplifiedScoreCalculator
 import com.example.gymprogress.data.TrainingGoal
 import com.example.gymprogress.data.WorkoutEntry
 import com.example.gymprogress.data.selectBestSessionEntry
+import com.example.gymprogress.ui.components.rememberHaptics
 import com.example.gymprogress.ui.theme.Spacing
 import com.example.gymprogress.ui.theme.Volt
 import kotlinx.coroutines.delay
@@ -545,6 +548,27 @@ fun AddEntryDialog(
                         )
                     }
 
+                    // Степпер веса: -2.5 / -0.5 / +0.5 / +2.5
+                    Spacer(modifier = Modifier.height(Spacing.xs))
+                    StepperRow(
+                        deltas = listOf(-2.5, -0.5, 0.5, 2.5),
+                        enabled = weightFieldEnabled,
+                        onDelta = { delta ->
+                            weightText = stepWeight(weightText, delta)
+                            weightError = false
+                            bodyWeightError = false
+                        },
+                        formatLabel = { d ->
+                            val sign = if (d > 0) "+" else "−"
+                            val absStr = if (kotlin.math.abs(d) == kotlin.math.abs(d).toLong().toDouble()) {
+                                kotlin.math.abs(d).toLong().toString()
+                            } else {
+                                String.format(Locale.US, "%.1f", kotlin.math.abs(d))
+                            }
+                            "$sign$absStr"
+                        }
+                    )
+
                     // Sets
                     Spacer(modifier = Modifier.height(4.dp))
                     Box(
@@ -560,6 +584,7 @@ fun AddEntryDialog(
                                 fontWeight = FontWeight.SemiBold
                             )
 
+                            val repsHaptics = rememberHaptics()
                             setReps.forEachIndexed { index, repsValue ->
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
@@ -584,6 +609,31 @@ fun AddEntryDialog(
                                                 }
                                             }
                                     )
+                                    Spacer(modifier = Modifier.width(Spacing.xs))
+                                    IconButton(
+                                        onClick = {
+                                            repsHaptics.tap()
+                                            setReps[index] = stepReps(setReps[index], -1)
+                                            repsError = false
+                                        }
+                                    ) {
+                                        Icon(
+                                            Icons.Default.KeyboardArrowDown,
+                                            contentDescription = "Минус 1 повтор"
+                                        )
+                                    }
+                                    IconButton(
+                                        onClick = {
+                                            repsHaptics.tap()
+                                            setReps[index] = stepReps(setReps[index], 1)
+                                            repsError = false
+                                        }
+                                    ) {
+                                        Icon(
+                                            Icons.Default.KeyboardArrowUp,
+                                            contentDescription = "Плюс 1 повтор"
+                                        )
+                                    }
                                     if (setReps.size > 1) {
                                         IconButton(onClick = { setReps.removeAt(index) }) {
                                             Icon(
@@ -607,6 +657,65 @@ fun AddEntryDialog(
                                 Text("Добавить подход")
                             }
                         }
+                    }
+
+                    // Live-превью оценочного 1RM для введённых веса и повторов.
+                    // Считаем через SimplifiedScoreCalculator независимо от выбранной системы —
+                    // это интуитивная единица, понятная пользователю.
+                    val previewE1RM = remember(
+                        weightText,
+                        setReps.toList(),
+                        selectedExercise,
+                        bodyWeightKg,
+                        isBodyweightExercise,
+                        addAdditionalWeight,
+                        storageDate
+                    ) {
+                        val noAdd = isBodyweightExercise && !addAdditionalWeight
+                        val weightInput = if (noAdd) 0.0 else parseWeightInput(weightText, isBodyweightExercise)
+                        if (!noAdd && (weightInput == null || !isWeightInputValid(weightInput, isBodyweightExercise))) {
+                            return@remember null
+                        }
+                        val finalWeight = if (noAdd) (bodyWeightKg ?: 0.0)
+                            else calcFinalWeight(weightInput, isBodyweightExercise, bodyWeightKg)
+                        if (finalWeight <= 0.0) return@remember null
+                        val validReps = setReps.mapNotNull { it.toIntOrNull() }.filter { it > 0 }
+                        if (validReps.isEmpty()) return@remember null
+                        val tempEntry = WorkoutEntry(
+                            id = 0L,
+                            date = storageDate,
+                            exerciseName = selectedExercise?.name ?: "",
+                            weight = finalWeight,
+                            reps = validReps.joinToString(",")
+                        )
+                        SimplifiedScoreCalculator.calcE1RMForEntry(
+                            tempEntry,
+                            bodyWeightKg,
+                            isBodyweightExercise
+                        ).takeIf { it > 0 }
+                    }
+                    val bestE1RM = remember(bestEntry, bodyWeightKg, isBodyweightExercise) {
+                        bestEntry?.let {
+                            SimplifiedScoreCalculator.calcE1RMForEntry(it, bodyWeightKg, isBodyweightExercise)
+                        }?.takeIf { it > 0 }
+                    }
+                    if (previewE1RM != null) {
+                        Spacer(modifier = Modifier.height(Spacing.sm))
+                        val deltaSuffix = bestE1RM?.let { best ->
+                            val delta = previewE1RM - best
+                            when {
+                                delta > 0.05 -> " · +${FormatUtils.formatTwoDecimals(delta)} к рекорду"
+                                delta < -0.05 -> " · ${FormatUtils.formatTwoDecimals(delta)} от рекорда"
+                                else -> " · ≈ рекорд"
+                            }
+                        } ?: ""
+                        Text(
+                            text = "1RM ≈ ${FormatUtils.formatTwoDecimals(previewE1RM)} кг$deltaSuffix",
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = if (bestE1RM != null && previewE1RM > bestE1RM + 0.05) Volt
+                                else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
 
@@ -678,6 +787,60 @@ fun AddEntryDialog(
             }
         ) {
             DatePicker(state = datePickerState)
+        }
+    }
+}
+
+/** Прибавляет/убавляет [delta] к численному значению веса. Пустое поле трактуется как 0.0. */
+private fun stepWeight(current: String, delta: Double): String {
+    val parsed = current.replace(',', '.').toDoubleOrNull() ?: 0.0
+    val updated = (parsed + delta).coerceAtLeast(0.0)
+    return if (updated == updated.toLong().toDouble()) {
+        updated.toLong().toString()
+    } else {
+        String.format(Locale.US, "%.1f", updated)
+    }
+}
+
+/** Прибавляет/убавляет [delta] к численному значению повторов. Пустое поле трактуется как 0. */
+private fun stepReps(current: String, delta: Int): String {
+    val parsed = current.toIntOrNull() ?: 0
+    val updated = (parsed + delta).coerceAtLeast(0)
+    return updated.toString()
+}
+
+/** Ряд чипов для пошагового изменения значения. Каждое нажатие — лёгкий haptic. */
+@Composable
+private fun StepperRow(
+    deltas: List<Double>,
+    enabled: Boolean,
+    onDelta: (Double) -> Unit,
+    formatLabel: (Double) -> String
+) {
+    val haptics = rememberHaptics()
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
+    ) {
+        deltas.forEach { delta ->
+            AssistChip(
+                onClick = {
+                    haptics.tap()
+                    onDelta(delta)
+                },
+                enabled = enabled,
+                label = {
+                    Text(
+                        text = formatLabel(delta),
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                },
+                colors = AssistChipDefaults.assistChipColors(
+                    labelColor = MaterialTheme.colorScheme.onSurface
+                ),
+                modifier = Modifier.weight(1f)
+            )
         }
     }
 }

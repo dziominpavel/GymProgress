@@ -56,6 +56,7 @@ import com.example.gymprogress.data.FormatUtils
 import com.example.gymprogress.data.MuscleGroup
 import com.example.gymprogress.data.SetType
 import com.example.gymprogress.data.WorkoutRecommendation
+import com.example.gymprogress.ui.components.rememberHaptics
 import com.example.gymprogress.ui.theme.CardShape
 import com.example.gymprogress.ui.theme.Spacing
 import com.example.gymprogress.ui.theme.Volt
@@ -68,6 +69,7 @@ fun ActiveWorkoutScreen(
     onCancel: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val haptics = rememberHaptics()
     var showCancelDialog by remember { mutableStateOf(false) }
     var currentExerciseIndex by remember { mutableIntStateOf(0) }
     var currentSetIndex by remember { mutableIntStateOf(0) }
@@ -225,6 +227,7 @@ fun ActiveWorkoutScreen(
                         val w = actualWeight.toDoubleOrNull() ?: 0.0
                         val r = actualReps.toIntOrNull() ?: 0
 
+                        haptics.confirm()
                         completedSets.add(
                             CompletedSet(
                                 exerciseName = currentExercise.exercise.name,

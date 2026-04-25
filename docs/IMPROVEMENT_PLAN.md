@@ -62,17 +62,15 @@
 - ручной перенос между устройствами (JSON),
 - возможность анализа в Excel (CSV).
 
-### 1.1 Дописать правила Auto Backup
+### 1.1 Дописать правила Auto Backup ✅ выполнено (2026-04-25)
 
-Текущие `backup_rules.xml` и `data_extraction_rules.xml` — заглушки. Дописать `<include>` блоки:
+`backup_rules.xml` и `data_extraction_rules.xml` заполнены явными `<include>`:
+- БД Room (`gym_progress_db` + `-shm` / `-wal`),
+- DataStore Preferences (`files/datastore/`).
 
-- БД Room: `domain="database"`, путь `gym_progress_db` (имя из `AppDatabase.getDatabase`).
-- DataStore-настройки: `domain="file"`, путь `datastore/settings.preferences_pb` (имя `settings` из `SettingsRepository`).
-- Исключить: кэши, `BuildConfig`-секреты в бэкап и так не попадают.
+`data_extraction_rules.xml` содержит оба блока — `<cloud-backup>` и `<device-transfer>`.
 
-В `data_extraction_rules.xml` заполнить и `<cloud-backup>`, и `<device-transfer>` — Android 12+ использует разные блоки для бэкапа в Google и для прямой передачи устройство-устройство.
-
-**Готово, когда:** на тестовом устройстве после переустановки приложения с включённым «Backup by Google One» восстанавливаются записи и настройки.
+**Осталось:** проверить на тестовом устройстве сценарий «установить → добавить записи → переустановить с включённым Google Backup → данные восстановились».
 
 ### 1.2 Ручной экспорт/импорт JSON через SAF
 
@@ -208,54 +206,51 @@
 
 ## Фаза 2. Быстрые UX-улучшения
 
-### 2.1 Подтверждение удаления через Snackbar Undo
+### 2.1 Подтверждение удаления через Snackbar Undo ✅ выполнено в Журнале (2026-04-25)
+- В `JournalScreen` добавлен `pendingDelete: SnapshotStateMap<Long, WorkoutEntry>`.
+- Удаление записи из диалога long-press → запись скрывается из UI (через `visibleTodayEntries`/`visiblePreviousExercises`), показывается `SnackbarHost` с действием «Отменить» (`SnackbarDuration.Short`).
+- Если пользователь нажал «Отменить» — запись возвращается в UI, реального `onDeleteEntry()` не происходит.
+- Если Snackbar истёк/был сброшен — вызывается `onDeleteEntry(entry)`.
 
-Сейчас `onDeleteEntry`/`onDeleteExercise` исполняются мгновенно, без отмены. Заменить на soft-delete:
-- Удалить из UI-состояния сразу.
-- Snackbar «Запись удалена. Отменить» (5 сек, `LaunchedEffect`).
-- По истечении — реальный `workoutDao.delete()`.
-- По нажатию Undo — вернуть в UI без обращения к БД.
+**2026-04-25 (расширение):** тот же паттерн перенесён в `WorkoutHistoryScreen` — `pendingDelete` + `SnackbarHost` в `Scaffold`, удаление через `requestDeleteWithUndo`. `filteredEntries` строится из `visibleEntries` (entries без pending).
 
-Это базовый Material pattern, минимизирует риск случайной потери записи.
+**Ограничения:**
+- Локальный state экрана — при уходе и быстром возврате pending теряется (corutine отменилась → запись остаётся в БД). Это компромисс ради простоты; для жёстких гарантий нужно поднимать pending в ViewModel.
 
-### 2.2 Степперы ± в `AddEntryDialog`
+### 2.2 Степперы ± в `AddEntryDialog` ✅ выполнено (2026-04-25)
+- Под полем веса — ряд `AssistChip` через `StepperRow`: −2.5 / −0.5 / +0.5 / +2.5.
+- Рядом с каждым полем подхода — две `IconButton` (`KeyboardArrowDown` / `KeyboardArrowUp`) для −1/+1 повтора. Тач-таргет 48dp (стандартный размер `IconButton`).
+- Парсинг и обновление через helper-функции `stepWeight(current, delta)` и `stepReps(current, delta)`. Пустое поле трактуется как 0; результат не уходит ниже нуля.
+- Каждое нажатие даёт `haptics.tap()`.
+- Степпер веса отключается, когда `weightFieldEnabled = false` (BW-упражнение без доп. веса).
 
-Сейчас вес и повторы вводятся только клавиатурой. Добавить ряд кнопок:
-- Для веса: `-2.5 / -0.5 / +0.5 / +2.5` под полем.
-- Для повторов: `-1 / +1` рядом с каждым подходом.
-- Каждая кнопка ≥ 48dp по тач-таргету.
-- Лёгкий haptic (`LocalHapticFeedback.HapticFeedbackType.LongPress`/`TextHandleMove`).
+### 2.3 PR-бейджи (Personal Records) ✅ выполнено (2026-04-25)
+- В `MainActivity` вычисляется `personalRecordEntryIds: Set<Long>` — id записей с максимальным оценочным 1RM в рамках упражнения (через `SimplifiedScoreCalculator.calcE1RMForEntry`, группировка по нормализованному имени).
+- `JournalScreen` (`WorkoutEntryCard`, `PreviousSessionExerciseRow`) и `WorkoutHistoryScreen` (`WorkoutEntryCard`) рисуют иконку `Icons.Default.EmojiEvents` цвета `Volt` рядом с именем упражнения, если запись — PR.
+- Используется одна метрика (1RM) — самая интуитивная единица. PR по объёму и максимальному весу можно добавить позже как отдельные индикаторы.
 
-Особенно полезно во время тренировки между подходами.
+**Не реализовано (для будущей итерации):**
+- Snackbar «Новый рекорд!» при создании нового PR — нужно отслеживать факт прохождения через PR-границу при добавлении записи.
+- Анимированная подсветка карточки.
 
-### 2.3 PR-бейджи (Personal Records)
+### 2.4 Универсальный Empty State ✅ выполнено (2026-04-25)
+- Создан `ui/components/EmptyState.kt` — параметры `icon`, `title`, `description`, опциональные `actionLabel` + `onAction`.
+- Применён в `WorkoutHistoryScreen` (иконка `Inbox`, разные тексты для пустой даты и пустой истории) и `ExercisesScreen` (иконка `FitnessCenter`, CTA «Добавить упражнение» открывает диалог).
+- Внутри: иконка `iconXl` (48dp) на скруглённом фоне `surfaceVariant` (`CardShape`, 80dp), `titleMedium` Bold, `bodyMedium` Secondary, опциональный `OutlinedButton` (`ButtonShape`).
+- Эмпти-стейты внутри `JournalScreen` оставлены кастомными — они контекстные («Сегодня ещё нет тренировок» с разными подсказками в зависимости от наличия prev session).
 
-Считать рекорды по упражнению по трём осям:
-- максимальный вес (за 1 повторение в подходе),
-- максимальный подходовый объём (`weight × max(reps)`),
-- максимальный 1RM (через `SimplifiedScoreCalculator.estimate1Rm` или эквивалент).
+### 2.5 «Повторить запись» ✅ выполнено (2026-04-25)
+- В диалоге long-press по карточке (`JournalScreen`) добавлена кнопка «Повторить сегодня» — первая в списке (выше «Редактировать» и «Удалить»).
+- Прокинут `onRepeatEntry: (WorkoutEntry) -> Unit` из `MainActivity` → `viewModel.addEntry(today, exerciseName, weight, reps)`. Создаёт новую запись на сегодняшнюю дату с тем же упражнением, весом и повторами.
+- Swipe-жесты пока не реализованы — long-press диалог покрывает основной use case без введения новых жестов.
 
-В `JournalScreen` и `WorkoutHistoryScreen` на карточке записи — иконка-бейдж (`Icons.Default.EmojiEvents` или `Icons.Default.Star` цвета `GymTheme.colors.success`) при попадании записи в любую из трёх категорий. Tooltip/субтитр: «Рекорд: 1RM».
-
-При создании новой записи-PR — кратковременная Snackbar «Новый рекорд!». Подсветка карточки `GymTheme.colors.successContainer` на 2 секунды.
-
-### 2.4 Универсальный Empty State
-
-Сейчас в каждом экране пустое состояние решается по-своему. Создать `ui/components/EmptyState.kt`:
-```kotlin
-@Composable
-fun EmptyState(icon: ImageVector, title: String, description: String, primaryAction: (() -> Unit)? = null, actionLabel: String? = null)
-```
-
-Использовать в `JournalScreen` (пустой день), `StatsScreen` (нет упражнений / нет записей), `ExercisesScreen`, `WorkoutHistoryScreen`.
-
-### 2.5 «Повторить запись»
-
-В `JournalScreen` swipe вправо по карточке предыдущей записи или в меню долгого тапа — «Повторить сегодня». Создаёт `WorkoutEntry` с `date = today`, тем же упражнением, весом и повторами. Решает основной use-case прогрессии: «вчера 60×8, сегодня делаю то же».
-
-### 2.6 Превью «как изменится рекорд» в `AddEntryDialog`
-
-Под полем веса/повторов — небольшой текст «1RM: 95 кг (+1.5 к рекорду)». Использовать существующий `scoringEngine` из ViewModel. Расчёт live при изменении полей.
+### 2.6 Превью «как изменится рекорд» в `AddEntryDialog` ✅ выполнено (2026-04-25)
+- Под блоком подходов отображается строка: `1RM ≈ X.XX кг · +Δ к рекорду` (или `· Δ от рекорда` / `· ≈ рекорд`).
+- Расчёт live через `SimplifiedScoreCalculator.calcE1RMForEntry(...)` на временной `WorkoutEntry`.
+- Сравнивается с `bestEntry` (тем же, что используется в секции «Лучшая тренировка»).
+- При превышении рекорда строка подсвечивается цветом `Volt` — мотивирующий маркер.
+- Показывается только когда вес и хотя бы один валидный повтор введены; иначе — скрыто.
+- Используется упрощённая система независимо от выбранной пользователем — 1RM в кг это интуитивная единица.
 
 ---
 
@@ -282,16 +277,12 @@ Chip-row: **Объём / 1RM / Рабочий вес / Score**. Переключ
 
 ## Фаза 4. Дизайн-полировка
 
-### 4.1 Выбор темы пользователем
-Сейчас в `Theme.kt` `darkTheme: Boolean = true` зашит. Добавить:
-- В `SettingsRepository` — `themeMode: Flow<ThemeMode>` (`SYSTEM / LIGHT / DARK`), по умолчанию `SYSTEM`.
-- В `Theme.kt` — `darkTheme` вычислять как:
-  ```
-  when (themeMode) { SYSTEM -> isSystemInDarkTheme(); LIGHT -> false; DARK -> true }
-  ```
-- В `SettingsScreen` — переключатель «Тема приложения: Авто/Светлая/Тёмная».
-
-Светлая схема в `Theme.kt` уже описана — нужно лишь дать пользователю возможность её включить.
+### 4.1 Выбор темы пользователем ✅ выполнено (2026-04-25)
+- Добавлен enum `ThemeMode` (`SYSTEM` / `LIGHT` / `DARK`), хранится в DataStore (ключ `theme_mode`).
+- `SettingsRepository.themeMode` Flow + `setThemeMode`, `WorkoutViewModel.themeMode` StateFlow + `setThemeMode`.
+- `GymProgressTheme(themeMode: ThemeMode)` вычисляет `darkTheme` через `when (mode)` с `isSystemInDarkTheme()` для `SYSTEM`.
+- `MainActivity.setContent` читает ViewModel-флоу и передаёт в `GymProgressTheme`.
+- В `SettingsScreen` — блок «Тема приложения» с тремя RadioButton-карточками в стиле блока выбора системы оценки.
 
 ### 4.2 Dynamic color (Material You)
 
@@ -299,14 +290,20 @@ Chip-row: **Объём / 1RM / Рабочий вес / Score**. Переключ
 
 **Риск:** dynamic color теряет «фирменный» Volt/Obsidian-стиль. Сделать **по запросу пользователя**, не по умолчанию.
 
-### 4.3 Иконки табов
+### 4.3 Иконки табов ✅ выполнено (2026-04-25)
 В `MainActivity.AppDestinations`:
-- `JOURNAL` (`Icons.Default.DateRange`) → можно оставить или `Icons.Default.Today`.
-- `STATS` (`Icons.Default.Star`) → `Icons.AutoMirrored.Filled.TrendingUp` (звезда плохо передаёт «прогресс»).
-- `EXERCISES` (`Icons.Default.List`) → `Icons.Default.FitnessCenter`.
+- `JOURNAL` — оставлен `Icons.Default.DateRange`.
+- `STATS` — `Icons.Default.Star` → `Icons.AutoMirrored.Filled.TrendingUp`.
+- `EXERCISES` — `Icons.Default.List` (deprecated) → `Icons.Default.FitnessCenter`.
 
-### 4.4 Haptic feedback
-Лёгкий `LocalHapticFeedback` на: фиксацию подхода в активной тренировке, нажатие FAB, новый PR. Сделать единый `HapticHelper` для централизации.
+В рамках задачи добавлена зависимость `androidx.compose.material:material-icons-extended` (нужны были иконки за пределами core-набора). R8 в release-сборке уберёт неиспользуемые. Это разово открыло доступ ко всему extended-набору для будущих фаз (PR-бейджи, иконки таймера, счётчиков и т.п.).
+
+### 4.4 Haptic feedback ✅ выполнено (2026-04-25)
+- Создан хелпер `ui/components/HapticHelper.kt` с тремя уровнями: `tap()` — лёгкий отклик, `confirm()` — заметный для значимых событий, `warn()` — для деструктивных.
+- `JournalScreen` — `tap()` на нажатие FAB.
+- `ActiveWorkoutScreen` — `confirm()` при фиксации подхода.
+
+Добавление отклика на PR-событие отложено до фазы 2.3.
 
 ### 4.5 Ревизия dark/light контраста
 Прогнать все экраны в обеих темах после 4.1. Особое внимание: оси и сетка графика, `surfaceVariant` карточек, disabled states.
@@ -315,28 +312,30 @@ Chip-row: **Объём / 1RM / Рабочий вес / Score**. Переключ
 
 ## Фаза 5. Навигация
 
-### 5.1 «Ещё» как `ModalBottomSheet`
-Заменить `DropdownMenu` в `AppNavigationScaffold.kt:54-104` на `ModalBottomSheet`. Причины:
-- `DropdownMenu` плохо якорится в `NavigationRail`/`PermanentDrawer` при адаптивных режимах `NavigationSuiteScaffold`.
-- Тач-таргеты больше (56dp), нет проблем с обрезкой.
+### 5.1 «Ещё» как `ModalBottomSheet` ✅ выполнено (2026-04-25)
+- `AppNavigationScaffold` изменён: вместо `DropdownMenu` в иконке «Ещё» используется `ModalBottomSheet` с `skipPartiallyExpanded = true`.
+- Пункты меню — `MoreSheetItem` с иконкой и текстом, минимальный тач-таргет 56dp (`Spacing.huge`).
+- Иконки: `Tune` (Настройки тренера), `Outlined.History` (История), `Settings`, `Info` (О приложении).
+- При нажатии пункта — sheet плавно прячется, затем вызывается открытие оверлея.
+- Пункт «Резервное копирование» будет добавлен вместе с фазой 1.2.
 
-Содержимое: список `ListItem` — «Настройки тренера», «История тренировок», «Резервное копирование» (после фазы 1), «Настройки», «О приложении».
+### 5.2 Анимации overlay-переходов ✅ выполнено (2026-04-25)
+- `when (topOverlay)` в `MainActivity` обёрнут в `AnimatedContent` с `transitionSpec`, различающим push/pop по размеру стека:
+  - **Push** (стек растёт) — новый экран въезжает справа, старый уходит влево на 1/4 экрана.
+  - **Pop** (стек уменьшается) — старый уезжает вправо, подложка появляется слева.
+  - **Open/close от root** — оверлей въезжает справа / уезжает вправо.
+- Диалог «Новая запись» (`AddEntryDialog`) остался вне стека — у него своя анимация от Material `Dialog`.
+- Длительность — 220 мс (`tween`).
 
-### 5.2 Анимации overlay-переходов
-Обернуть оверлей-ветки в `MainActivity:167-305` в `AnimatedContent`/`AnimatedVisibility` со `slideInHorizontally`/`fadeIn`. Это аддитивная правка без переписывания структуры.
+### 5.3 Унификация back-логики ✅ выполнено (2026-04-25)
+- `AppOverlayState` (data class с 9 boolean-флагами) и его Saver удалены.
+- Добавлен sealed `AppOverlay` (`ProgressChart`, `WorkoutHistory`, `Settings`, `About`, `Trainer`, `TrainerSettings`, `ActiveWorkout`) в `ui/navigation/AppOverlay.kt`.
+- Состояние — `SnapshotStateList<AppOverlay>` через `rememberSaveable(saver = OverlayStackSaver)` (сериализация в список строк).
+- Единый `BackHandler(enabled = overlayStack.isNotEmpty())` в корне — обрабатывает system back по верху стека с особыми реакциями для `TrainerSettings` (сохранить настройки), `ActiveWorkout` (сбросить рекомендацию), `Trainer` (очистить AI-совет). Остальные — просто `pop`.
+- Флаг `openedSettingsFromTrainer` удалён за ненужностью: стек сам разруливает возврат (Trainer → TrainerSettings → back возвращает к Trainer; «Ещё» → TrainerSettings → back в корень).
+- Диалог `AddEntryDialog` остался отдельным boolean — он не fullscreen overlay.
 
-### 5.3 Унификация back-логики
-Сейчас `BackHandler` в каждом overlay блоке дублирует логику закрытия и есть ручной `openedSettingsFromTrainer` флаг (`MainActivity:233-253`). Вынести в `OverlayStack`-helper:
-```kotlin
-class OverlayStack {
-    fun push(overlay: OverlayId)
-    fun pop(): OverlayId?
-    @Composable fun BackHandler()
-}
-```
-Уменьшит риск рассинхрона флагов.
-
-**Не делать** полную миграцию на `NavHost` — это переломный рефакторинг, выгода маржинальна.
+Миграция на `NavHost` не делается — выгода маржинальна, риск высок.
 
 ---
 
@@ -387,15 +386,17 @@ class OverlayStack {
 
 ## Фаза 8. Чистка техдолга
 
-### 8.1 Удалить мёртвый код
-- `WorkoutViewModel.exerciseNames` (строки 81-82) — не используется.
-- `WorkoutDao.getAllExerciseNames()` (строки 30-31) — не используется.
-- Удалить вместе с импортами.
+### 8.1 Удалить мёртвый код ✅ выполнено (2026-04-25)
+- Удалены `WorkoutViewModel.exerciseNames` и `WorkoutDao.getAllExerciseNames()`.
+- Сборка `compileDebugKotlin` зелёная.
 
-### 8.2 Case-insensitive уникальность упражнений + UI-проверка
-- Миграция `MIGRATION_x_y`: пересоздать индекс с `COLLATE NOCASE` (или нормализовать `name` в новой колонке `nameKey` и индекс на ней).
-- В `ExercisesScreen` перед вставкой/обновлением вызывать `exerciseDao.countByName(normalized)` и показывать понятный текст «Упражнение с таким именем уже есть».
-- Сейчас отлавливаем `SQLiteConstraintException` в `safeDb`, но сообщение «UNIQUE constraint failed» — не для пользователя.
+### 8.2 Case-insensitive уникальность упражнений + UI-проверка ✅ выполнено частично (2026-04-25)
+- `ExerciseDao.countByNormalizedName(name, excludeId)` — SQL `LOWER(TRIM(REPLACE(name, char(160), ' ')))` для case-insensitive и неразрывных пробелов.
+- `WorkoutViewModel.addExercise` и `updateExercise` проверяют `countByNormalizedName(normalizeExerciseNameKey(name))` до вставки. При дублях — понятное сообщение в `errorMessage` (Snackbar). При пустом имени — тоже ругаемся.
+
+**Что осталось (отложено):**
+- Миграция базы данных для индекса `COLLATE NOCASE` (или `nameKey`-колонки) — жёсткая защита на уровне СУБД. Сделаем вместе с фазой 8.3 (FK + clientId), чтобы все миграции схемы были в одном релизе.
+- Маппинг `SQLiteConstraintException` в понятное сообщение (сейчас UI-проверки хватает в 99% сценариев, но возможны race conditions).
 
 ### 8.3 FK `WorkoutEntry.exerciseId → Exercise.id` (большой шаг)
 Самая инвазивная правка. Делать в **одной связке** с фазой 1 (для бэкапа всё равно нужен `clientId`):

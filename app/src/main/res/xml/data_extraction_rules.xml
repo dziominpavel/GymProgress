@@ -1,19 +1,22 @@
-<?xml version="1.0" encoding="utf-8"?><!--
-   Sample data extraction rules file; uncomment and customize as necessary.
-   See https://developer.android.com/about/versions/12/backup-restore#xml-changes
-   for details.
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Правила извлечения данных для Android 12+.
+    cloud-backup — бэкап в Google One; device-transfer — прямая передача между устройствами.
+    Включаем БД Room и DataStore Preferences; кэши и no_backup исключаются по умолчанию.
+
+    Для Android 11 и ниже используется res/xml/backup_rules.xml.
 -->
 <data-extraction-rules>
     <cloud-backup>
-        <!-- TODO: Use <include> and <exclude> to control what is backed up.
-        <include .../>
-        <exclude .../>
-        -->
+        <include domain="database" path="gym_progress_db" />
+        <include domain="database" path="gym_progress_db-shm" />
+        <include domain="database" path="gym_progress_db-wal" />
+        <include domain="file" path="datastore/" />
     </cloud-backup>
-    <!--
     <device-transfer>
-        <include .../>
-        <exclude .../>
+        <include domain="database" path="gym_progress_db" />
+        <include domain="database" path="gym_progress_db-shm" />
+        <include domain="database" path="gym_progress_db-wal" />
+        <include domain="file" path="datastore/" />
     </device-transfer>
-    -->
 </data-extraction-rules>

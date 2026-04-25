@@ -17,6 +17,7 @@ import com.example.gymprogress.data.ScoringSystem
 import com.example.gymprogress.data.SetType
 import com.example.gymprogress.data.SettingsRepository
 import com.example.gymprogress.data.SimplifiedScoreCalculator
+import com.example.gymprogress.data.ThemeMode
 import com.example.gymprogress.data.TrainerRecommendationEngine
 import com.example.gymprogress.data.TrainerSettings
 import com.example.gymprogress.data.TrainingGoal
@@ -78,9 +79,6 @@ class WorkoutViewModel(application: Application) : AndroidViewModel(application)
     val allEntries: StateFlow<List<WorkoutEntry>> = workoutDao.getAllEntries()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    val exerciseNames: StateFlow<List<String>> = workoutDao.getAllExerciseNames()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
     val allExercises: StateFlow<List<Exercise>> = exerciseDao.getAllExercises()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -98,6 +96,9 @@ class WorkoutViewModel(application: Application) : AndroidViewModel(application)
 
     val gender: StateFlow<Gender?> = settingsRepository.gender
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    val themeMode: StateFlow<ThemeMode> = settingsRepository.themeMode
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ThemeMode.SYSTEM)
 
     val isAnthropometryComplete: StateFlow<Boolean> = settingsRepository.isAnthropometryComplete
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
@@ -312,9 +313,19 @@ class WorkoutViewModel(application: Application) : AndroidViewModel(application)
         isBodyweight: Boolean = false
     ) {
         safeDb("Не удалось добавить упражнение") {
+            val cleanName = name.trim()
+            if (cleanName.isEmpty()) {
+                _errorMessage.value = "Название упражнения не может быть пустым"
+                return@safeDb
+            }
+            val normalized = FormatUtils.normalizeExerciseNameKey(cleanName)
+            if (exerciseDao.countByNormalizedName(normalized) > 0) {
+                _errorMessage.value = "Упражнение с таким именем уже есть"
+                return@safeDb
+            }
             exerciseDao.insert(
                 Exercise(
-                    name = name.trim(),
+                    name = cleanName,
                     muscleGroup = muscleGroup,
                     exerciseType = exerciseType,
                     isBodyweight = isBodyweight
@@ -325,9 +336,20 @@ class WorkoutViewModel(application: Application) : AndroidViewModel(application)
 
     fun updateExercise(exercise: Exercise, oldName: String? = null) {
         safeDb("Не удалось обновить упражнение") {
-            exerciseDao.update(exercise)
-            if (oldName != null && oldName != exercise.name) {
-                workoutDao.renameExercise(oldName, exercise.name)
+            val cleanName = exercise.name.trim()
+            if (cleanName.isEmpty()) {
+                _errorMessage.value = "Название упражнения не может быть пустым"
+                return@safeDb
+            }
+            val normalized = FormatUtils.normalizeExerciseNameKey(cleanName)
+            if (exerciseDao.countByNormalizedName(normalized, excludeId = exercise.id) > 0) {
+                _errorMessage.value = "Упражнение с таким именем уже есть"
+                return@safeDb
+            }
+            val finalExercise = if (cleanName != exercise.name) exercise.copy(name = cleanName) else exercise
+            exerciseDao.update(finalExercise)
+            if (oldName != null && oldName != finalExercise.name) {
+                workoutDao.renameExercise(oldName, finalExercise.name)
             }
         }
     }
@@ -365,6 +387,12 @@ class WorkoutViewModel(application: Application) : AndroidViewModel(application)
     fun setGender(value: Gender?) {
         safeDb("Не удалось сохранить пол") {
             settingsRepository.setGender(value)
+        }
+    }
+
+    fun setThemeMode(mode: ThemeMode) {
+        safeDb("Не удалось сохранить тему") {
+            settingsRepository.setThemeMode(mode)
         }
     }
 

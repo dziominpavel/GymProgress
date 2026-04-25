@@ -33,4 +33,16 @@ interface ExerciseDao {
 
     @Query("SELECT COUNT(*) FROM exercises WHERE name = :name")
     suspend fun countByName(name: String): Int
+
+    /**
+     * Поиск дубликатов с case-insensitive нормализацией пробелов и регистра
+     * (соответствует [com.example.gymprogress.data.FormatUtils.normalizeExerciseNameKey]).
+     * При обновлении упражнения исключающий [excludeId] позволяет не считать само себя.
+     */
+    @Query(
+        "SELECT COUNT(*) FROM exercises " +
+            "WHERE LOWER(TRIM(REPLACE(name, char(160), ' '))) = :normalizedName " +
+            "AND id != :excludeId"
+    )
+    suspend fun countByNormalizedName(normalizedName: String, excludeId: Long = 0): Int
 }
