@@ -6,6 +6,8 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.gymprogress.data.AiService
 import com.example.gymprogress.data.AppDatabase
+import com.example.gymprogress.data.ChartMetric
+import com.example.gymprogress.data.ChartRange
 import com.example.gymprogress.data.CompletedSet
 import com.example.gymprogress.data.Exercise
 import com.example.gymprogress.data.ExerciseRecommendation
@@ -17,7 +19,6 @@ import com.example.gymprogress.data.ScoringSystem
 import com.example.gymprogress.data.SetType
 import com.example.gymprogress.data.SettingsRepository
 import com.example.gymprogress.data.SimplifiedScoreCalculator
-import com.example.gymprogress.data.ThemeMode
 import com.example.gymprogress.data.TrainerRecommendationEngine
 import com.example.gymprogress.data.TrainerSettings
 import com.example.gymprogress.data.TrainingGoal
@@ -97,8 +98,11 @@ class WorkoutViewModel(application: Application) : AndroidViewModel(application)
     val gender: StateFlow<Gender?> = settingsRepository.gender
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
-    val themeMode: StateFlow<ThemeMode> = settingsRepository.themeMode
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ThemeMode.SYSTEM)
+    val chartRange: StateFlow<ChartRange> = settingsRepository.chartRange
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ChartRange.THREE_MONTHS)
+
+    val chartMetric: StateFlow<ChartMetric> = settingsRepository.chartMetric
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ChartMetric.E1RM)
 
     val isAnthropometryComplete: StateFlow<Boolean> = settingsRepository.isAnthropometryComplete
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
@@ -390,9 +394,15 @@ class WorkoutViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    fun setThemeMode(mode: ThemeMode) {
-        safeDb("Не удалось сохранить тему") {
-            settingsRepository.setThemeMode(mode)
+    fun setChartRange(range: ChartRange) {
+        safeDb("Не удалось сохранить диапазон графика") {
+            settingsRepository.setChartRange(range)
+        }
+    }
+
+    fun setChartMetric(metric: ChartMetric) {
+        safeDb("Не удалось сохранить метрику графика") {
+            settingsRepository.setChartMetric(metric)
         }
     }
 

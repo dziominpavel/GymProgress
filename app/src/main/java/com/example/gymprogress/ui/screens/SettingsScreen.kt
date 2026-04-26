@@ -44,7 +44,6 @@ import androidx.compose.ui.unit.dp
 import com.example.gymprogress.data.FormatUtils
 import com.example.gymprogress.data.Gender
 import com.example.gymprogress.data.ScoringSystem
-import com.example.gymprogress.data.ThemeMode
 import com.example.gymprogress.data.TrainingGoal
 import com.example.gymprogress.ui.theme.CardShape
 import com.example.gymprogress.ui.theme.Spacing
@@ -57,14 +56,12 @@ fun SettingsScreen(
     currentScoringSystem: ScoringSystem,
     currentGender: Gender?,
     currentHeightCm: Int?,
-    currentThemeMode: ThemeMode,
     isAnthropometryComplete: Boolean,
     onGoalChanged: (TrainingGoal) -> Unit,
     onBodyWeightChanged: (Double?) -> Unit,
     onScoringSystemChanged: (ScoringSystem) -> Unit,
     onGenderChanged: (Gender?) -> Unit,
     onHeightCmChanged: (Int?) -> Unit,
-    onThemeModeChanged: (ThemeMode) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -236,67 +233,6 @@ fun SettingsScreen(
                             text = "Для корректной работы упрощённой системы необходимо указать вес тела. Без него оценка для упражнений с собственным весом будет недоступна.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onErrorContainer
-                        )
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(Spacing.xl))
-
-            // ── Тема приложения ──
-            Text(
-                text = "Тема приложения",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            Spacer(modifier = Modifier.height(Spacing.xxs))
-            Text(
-                text = "Авто — следовать системной теме Android",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(modifier = Modifier.height(Spacing.md))
-
-            ThemeMode.entries.forEach { mode ->
-                val isSelected = mode == currentThemeMode
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 4.dp)
-                        .clip(CardShape)
-                        .clickable { onThemeModeChanged(mode) }
-                        .then(
-                            if (isSelected) Modifier.border(
-                                1.5.dp,
-                                Volt.copy(alpha = 0.5f),
-                                CardShape
-                            ) else Modifier
-                        ),
-                    colors = CardDefaults.cardColors(
-                        containerColor = if (isSelected) Volt.copy(alpha = 0.08f)
-                        else MaterialTheme.colorScheme.surface
-                    ),
-                    shape = CardShape
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(Spacing.md),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        RadioButton(
-                            selected = isSelected,
-                            onClick = { onThemeModeChanged(mode) },
-                            colors = RadioButtonDefaults.colors(selectedColor = Volt)
-                        )
-                        Spacer(modifier = Modifier.width(Spacing.sm))
-                        Text(
-                            text = mode.displayName,
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = if (isSelected) Volt
-                            else MaterialTheme.colorScheme.onSurface
                         )
                     }
                 }

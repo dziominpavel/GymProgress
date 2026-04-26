@@ -256,33 +256,55 @@
 
 ## Фаза 3. Графики прогресса
 
-В `ExerciseProgressChartScreen.kt` сейчас один статичный график с автоосями.
+В `ExerciseProgressChartScreen.kt` была одна статичная кривая с автоосями. После итерации добавлены диапазон дат, переключатель метрики, обогащённый tooltip, PR-точки и линия тренда.
 
-### 3.1 Диапазон дат
-Chip-row над графиком: **1М / 3М / 6М / 1Г / Всё**. По умолчанию 3М. Сохранять выбор в DataStore (`chartRangePref`).
+### 3.1 Диапазон дат ✅ выполнено (2026-04-26)
+- Введён enum `data/ChartRange.kt`: `ONE_MONTH(30)`, `THREE_MONTHS(90)`, `SIX_MONTHS(180)`, `ONE_YEAR(365)`, `ALL(null)`.
+- Хранение в DataStore (`SettingsRepository.chartRange` / `setChartRange`), `WorkoutViewModel.chartRange` StateFlow + `setChartRange`.
+- Chip-row `ChartRangeChips` (FilterChip) над графиком, по умолчанию `THREE_MONTHS`.
+- Фильтр применяется внутри `buildExerciseProgressChartPoints` после вычисления PR-флага: точки с датой раньше `today − range.days` отбрасываются, при `ALL` фильтр отсутствует.
 
-### 3.2 Переключатель метрики
-Chip-row: **Объём / 1RM / Рабочий вес / Score**. Переключатель влияет на `yValue` точек.
+### 3.2 Переключатель метрики ✅ выполнено (2026-04-26)
+- Введён enum `data/ChartMetric.kt`: `E1RM` («1RM», кг), `VOLUME` («Объём», кг), `WORKING_WEIGHT` («Раб. вес», кг), `SCORE` («Score», без единицы).
+- Хранение в DataStore (`SettingsRepository.chartMetric` / `setChartMetric`), `WorkoutViewModel.chartMetric` StateFlow + `setChartMetric`.
+- Chip-row `ChartMetricChips` под чипами диапазона.
+- `buildExerciseProgressChartPoints` принимает `metric` и для каждого дня выбирает «представителя» с максимумом по выбранной метрике; `ExerciseProgressChartPoint` теперь хранит сразу `e1rm`, `volume`, `workingWeight`, `score` представителя — для tooltip.
+- Подпись оси Y и шаг сетки адаптивные: `niceStep` округляет шаг в ряд 1/2/5/10/20/50/100/200/500…, а не фиксирует 10. Подписи через `formatAxisLabel` (целое для VOLUME/SCORE, дробное для мелких 1RM).
 
-### 3.3 Tooltip
-Тап/drag по графику → пузырёк с датой, весом×повторами, 1RM, Score. Рисуется поверх Canvas через `pointerInput`.
+### 3.3 Tooltip ✅ выполнено (2026-04-26)
+- При тапе по точке открывается `AlertDialog` с датой (плюс маркер «· Рекорд» в цвете `success`, если PR), строкой подхода `вес × повторы` (как введено пользователем), объёмом, оценочным 1RM и баллом Score.
+- Hit-радиус 40dp, ближайшая точка выбирается по `hypot`, как и раньше.
 
-### 3.4 Линия тренда (опционально)
-Линейная регрессия по выбранной метрике, рисуется пунктиром поверх. Подпись «Тренд: +0.8 кг/нед».
+### 3.4 Линия тренда ✅ выполнено (2026-04-26)
+- `computeTrend` — линейная регрессия по `yValue` от индекса точки; `null`, если точек < 2, нет дисперсии или диапазон дат меньше суток.
+- Рисуется пунктиром (`PathEffect.dashPathEffect(8/6 dp)`) поверх основной линии цветом `onSurfaceVariant.copy(alpha = 0.7f)`.
+- Под графиком — подпись `formatTrendText`: «Тренд: +0.8 кг/нед» / «−12 кг/нед» / «+25/нед» (для безразмерного Score). Знак, единица и формат числа подбираются автоматически.
 
-### 3.5 PR-точки
-Точки-рекорды — увеличенный радиус и цвет `GymTheme.colors.success`.
+### 3.5 PR-точки ✅ выполнено (2026-04-26)
+- `ExerciseProgressChartPoint.isPersonalRecord` проставляется по полной истории до фильтра по диапазону: точка считается рекордом, если её `yValue` не меньше всех предыдущих (running max).
+- На графике PR-точки рисуются увеличенным радиусом (9dp вместо 6dp) и обводкой `GymTheme.colors.success`. Внутренний кружок — `surface`, как у обычных точек.
+- В Tooltip заголовок дополнительно подсвечивается зелёным, к дате добавляется «· Рекорд».
+
+### 3.6 Прочее
+- Цвет основной линии и обычных точек переключён с прямого `Volt` на `MaterialTheme.colorScheme.primary` (в текущей тёмной теме это тот же `Volt`, но через токен — на случай возвращения к светлой теме в фазе 4).
+- `ExerciseProgressChartScreen` стал получать `chartRange`/`chartMetric` и обработчики извне (от `MainActivity` через `WorkoutViewModel`), `buildExerciseProgressChartPoints` больше не зависит от `ScoringSystem`: метрика выбирается явно.
 
 ---
 
 ## Фаза 4. Дизайн-полировка
 
-### 4.1 Выбор темы пользователем ✅ выполнено (2026-04-25)
-- Добавлен enum `ThemeMode` (`SYSTEM` / `LIGHT` / `DARK`), хранится в DataStore (ключ `theme_mode`).
-- `SettingsRepository.themeMode` Flow + `setThemeMode`, `WorkoutViewModel.themeMode` StateFlow + `setThemeMode`.
-- `GymProgressTheme(themeMode: ThemeMode)` вычисляет `darkTheme` через `when (mode)` с `isSystemInDarkTheme()` для `SYSTEM`.
-- `MainActivity.setContent` читает ViewModel-флоу и передаёт в `GymProgressTheme`.
-- В `SettingsScreen` — блок «Тема приложения» с тремя RadioButton-карточками в стиле блока выбора системы оценки.
+### 4.1 Выбор темы пользователем ⛔ отменено (2026-04-26)
+Изначально (2026-04-25) был добавлен выбор темы (`ThemeMode` SYSTEM/LIGHT/DARK), но светлая схема оказалась нерабочей: `GymTheme.colors.success` и другие токены были подобраны под тёмный бренд IRON CORE и не читаются на светлом фоне. Полный аудит контрастов (4.5) до релиза не помещался, поэтому **возможность выбора темы откатана**:
+
+- `data/ThemeMode.kt` удалён.
+- `GymProgressTheme` снова без параметров, использует только `DarkColorScheme` + `DarkExtendedColors` (как до 2026-04-25).
+- В `SettingsRepository` убраны `themeMode` Flow и `setThemeMode` (ключ `theme_mode` в DataStore просто перестаёт читаться — при следующей записи он не воссоздаётся).
+- В `WorkoutViewModel` убраны `themeMode` StateFlow и `setThemeMode`.
+- В `MainActivity` убраны сбор `themeMode` и проброс в `GymProgressTheme`/`SettingsScreen`.
+- В `SettingsScreen` удалён блок «Тема приложения» и параметры `currentThemeMode`/`onThemeModeChanged`.
+- `LightColorScheme`/`LightExtendedColors` в `Theme.kt` остаются объявлёнными как заготовки под будущую светлую тему — их не использует никто.
+
+Возвращаться к этому стоит только в связке с фазой 4.5 (полная ревизия контраста для светлой темы).
 
 ### 4.2 Dynamic color (Material You)
 

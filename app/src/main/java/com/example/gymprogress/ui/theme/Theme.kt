@@ -1,6 +1,5 @@
 package com.example.gymprogress.ui.theme
 
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
@@ -9,7 +8,6 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
-import com.example.gymprogress.data.ThemeMode
 
 // ═══════════════════════════════════════════════════════════════════
 // IRON CORE Design System — Theme
@@ -150,24 +148,18 @@ object GymTheme {
 
 // ─── Theme composable ───
 
+// Светлая тема пока не используется в UI: бренд-стиль IRON CORE рассчитан
+// на тёмный режим, а под светлый ColorScheme нужно отдельно править контрасты
+// (зелёный success на белом, оси графика и т.д.). До этой работы тема — только тёмная.
 @Composable
 fun GymProgressTheme(
-    themeMode: ThemeMode = ThemeMode.SYSTEM,
     content: @Composable () -> Unit
 ) {
-    val darkTheme = when (themeMode) {
-        ThemeMode.SYSTEM -> isSystemInDarkTheme()
-        ThemeMode.LIGHT -> false
-        ThemeMode.DARK -> true
-    }
-    val colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme
-    val extendedColors = if (darkTheme) DarkExtendedColors else LightExtendedColors
-
     CompositionLocalProvider(
-        LocalGymExtendedColors provides extendedColors
+        LocalGymExtendedColors provides DarkExtendedColors
     ) {
         MaterialTheme(
-            colorScheme = colorScheme,
+            colorScheme = DarkColorScheme,
             typography = Typography,
             shapes = GymShapes,
             content = content

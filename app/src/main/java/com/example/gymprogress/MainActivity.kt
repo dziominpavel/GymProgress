@@ -75,8 +75,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             val workoutViewModel: WorkoutViewModel = viewModel()
-            val themeMode by workoutViewModel.themeMode.collectAsState()
-            GymProgressTheme(themeMode = themeMode) {
+            GymProgressTheme {
                 GymProgressApp(workoutViewModel)
             }
         }
@@ -128,7 +127,8 @@ fun GymProgressApp(viewModel: WorkoutViewModel = viewModel()) {
     val scoringSystem by viewModel.scoringSystem.collectAsState()
     val gender by viewModel.gender.collectAsState()
     val heightCm by viewModel.heightCm.collectAsState()
-    val themeMode by viewModel.themeMode.collectAsState()
+    val chartRange by viewModel.chartRange.collectAsState()
+    val chartMetric by viewModel.chartMetric.collectAsState()
     val isAnthropometryComplete by viewModel.isAnthropometryComplete.collectAsState()
     val scoringEngine by viewModel.scoringEngine.collectAsState()
     val selectedExerciseType by viewModel.selectedExerciseType.collectAsState()
@@ -321,6 +321,10 @@ fun GymProgressApp(viewModel: WorkoutViewModel = viewModel()) {
                         bodyWeightKg = bodyWeightKg,
                         isBodyweightExercise = chartExerciseMeta?.isBodyweight == true,
                         isAnthropometryIncompleteForBw = !isAnthropometryComplete,
+                        chartRange = chartRange,
+                        chartMetric = chartMetric,
+                        onChartRangeChange = { viewModel.setChartRange(it) },
+                        onChartMetricChange = { viewModel.setChartMetric(it) },
                         onBack = { popOverlay() },
                         modifier = Modifier.fillMaxSize()
                     )
@@ -342,14 +346,12 @@ fun GymProgressApp(viewModel: WorkoutViewModel = viewModel()) {
                 currentScoringSystem = scoringSystem,
                 currentGender = gender,
                 currentHeightCm = heightCm,
-                currentThemeMode = themeMode,
                 isAnthropometryComplete = isAnthropometryComplete,
                 onGoalChanged = { viewModel.setTrainingGoal(it) },
                 onBodyWeightChanged = { viewModel.setBodyWeightKg(it) },
                 onScoringSystemChanged = { viewModel.setScoringSystem(it) },
                 onGenderChanged = { viewModel.setGender(it) },
                 onHeightCmChanged = { viewModel.setHeightCm(it) },
-                onThemeModeChanged = { viewModel.setThemeMode(it) },
                 onBack = { popOverlay() },
                 modifier = Modifier.fillMaxSize()
             )

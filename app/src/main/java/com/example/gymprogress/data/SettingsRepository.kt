@@ -28,7 +28,8 @@ class SettingsRepository(private val context: Context) {
     private val scoringSystemKey = stringPreferencesKey("scoring_system")
     private val heightCmKey = stringPreferencesKey("height_cm")
     private val genderKey = stringPreferencesKey("user_gender")
-    private val themeModeKey = stringPreferencesKey("theme_mode")
+    private val chartRangeKey = stringPreferencesKey("chart_range")
+    private val chartMetricKey = stringPreferencesKey("chart_metric")
 
     val trainingGoal: Flow<TrainingGoal> = context.dataStore.data.map { prefs ->
         val name = prefs[goalKey] ?: TrainingGoal.HYPERTROPHY.name
@@ -91,14 +92,25 @@ class SettingsRepository(private val context: Context) {
         }
     }
 
-    val themeMode: Flow<ThemeMode> = context.dataStore.data.map { prefs ->
-        val name = prefs[themeModeKey] ?: ThemeMode.SYSTEM.name
-        ThemeMode.entries.find { it.name == name } ?: ThemeMode.SYSTEM
+    val chartRange: Flow<ChartRange> = context.dataStore.data.map { prefs ->
+        val name = prefs[chartRangeKey] ?: ChartRange.THREE_MONTHS.name
+        ChartRange.entries.find { it.name == name } ?: ChartRange.THREE_MONTHS
     }
 
-    suspend fun setThemeMode(mode: ThemeMode) {
+    suspend fun setChartRange(range: ChartRange) {
         context.dataStore.edit { prefs ->
-            prefs[themeModeKey] = mode.name
+            prefs[chartRangeKey] = range.name
+        }
+    }
+
+    val chartMetric: Flow<ChartMetric> = context.dataStore.data.map { prefs ->
+        val name = prefs[chartMetricKey] ?: ChartMetric.E1RM.name
+        ChartMetric.entries.find { it.name == name } ?: ChartMetric.E1RM
+    }
+
+    suspend fun setChartMetric(metric: ChartMetric) {
+        context.dataStore.edit { prefs ->
+            prefs[chartMetricKey] = metric.name
         }
     }
 
