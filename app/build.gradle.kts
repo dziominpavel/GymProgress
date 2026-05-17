@@ -85,6 +85,14 @@ android {
         compose = true
         buildConfig = true
     }
+    lint {
+        // Доступность: иконки/изображения без contentDescription — ошибка сборки.
+        // Декоративные иконки помечаются явным `contentDescription = null`.
+        error += "ContentDescription"
+        // Чтобы регрессия не уехала в release.
+        abortOnError = true
+        warningsAsErrors = false
+    }
 }
 
 dependencies {
@@ -99,6 +107,7 @@ dependencies {
     implementation(libs.androidx.compose.material3.adaptive.navigation.suite)
     implementation(libs.androidx.compose.material.icons.extended)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
+    implementation(libs.androidx.lifecycle.service)
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler)

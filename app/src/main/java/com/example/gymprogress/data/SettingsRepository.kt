@@ -30,6 +30,8 @@ class SettingsRepository(private val context: Context) {
     private val genderKey = stringPreferencesKey("user_gender")
     private val chartRangeKey = stringPreferencesKey("chart_range")
     private val chartMetricKey = stringPreferencesKey("chart_metric")
+    private val timerSoundKey = booleanPreferencesKey("timer_sound_enabled")
+    private val timerVibrationKey = booleanPreferencesKey("timer_vibration_enabled")
 
     val trainingGoal: Flow<TrainingGoal> = context.dataStore.data.map { prefs ->
         val name = prefs[goalKey] ?: TrainingGoal.HYPERTROPHY.name
@@ -111,6 +113,28 @@ class SettingsRepository(private val context: Context) {
     suspend fun setChartMetric(metric: ChartMetric) {
         context.dataStore.edit { prefs ->
             prefs[chartMetricKey] = metric.name
+        }
+    }
+
+    /** Звуковой сигнал на финале таймера отдыха (3 коротких бипа + длинный по нулю). */
+    val timerSoundEnabled: Flow<Boolean> = context.dataStore.data.map { prefs ->
+        prefs[timerSoundKey] ?: true
+    }
+
+    suspend fun setTimerSoundEnabled(value: Boolean) {
+        context.dataStore.edit { prefs ->
+            prefs[timerSoundKey] = value
+        }
+    }
+
+    /** Вибрация на финале таймера отдыха. */
+    val timerVibrationEnabled: Flow<Boolean> = context.dataStore.data.map { prefs ->
+        prefs[timerVibrationKey] ?: true
+    }
+
+    suspend fun setTimerVibrationEnabled(value: Boolean) {
+        context.dataStore.edit { prefs ->
+            prefs[timerVibrationKey] = value
         }
     }
 

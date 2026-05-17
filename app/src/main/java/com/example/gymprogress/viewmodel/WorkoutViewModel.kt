@@ -104,6 +104,12 @@ class WorkoutViewModel(application: Application) : AndroidViewModel(application)
     val chartMetric: StateFlow<ChartMetric> = settingsRepository.chartMetric
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ChartMetric.E1RM)
 
+    val timerSoundEnabled: StateFlow<Boolean> = settingsRepository.timerSoundEnabled
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
+
+    val timerVibrationEnabled: StateFlow<Boolean> = settingsRepository.timerVibrationEnabled
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
+
     val isAnthropometryComplete: StateFlow<Boolean> = settingsRepository.isAnthropometryComplete
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
@@ -403,6 +409,18 @@ class WorkoutViewModel(application: Application) : AndroidViewModel(application)
     fun setChartMetric(metric: ChartMetric) {
         safeDb("Не удалось сохранить метрику графика") {
             settingsRepository.setChartMetric(metric)
+        }
+    }
+
+    fun setTimerSoundEnabled(value: Boolean) {
+        safeDb("Не удалось сохранить настройку звука таймера") {
+            settingsRepository.setTimerSoundEnabled(value)
+        }
+    }
+
+    fun setTimerVibrationEnabled(value: Boolean) {
+        safeDb("Не удалось сохранить настройку вибрации таймера") {
+            settingsRepository.setTimerVibrationEnabled(value)
         }
     }
 

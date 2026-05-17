@@ -129,6 +129,8 @@ fun GymProgressApp(viewModel: WorkoutViewModel = viewModel()) {
     val heightCm by viewModel.heightCm.collectAsState()
     val chartRange by viewModel.chartRange.collectAsState()
     val chartMetric by viewModel.chartMetric.collectAsState()
+    val timerSoundEnabled by viewModel.timerSoundEnabled.collectAsState()
+    val timerVibrationEnabled by viewModel.timerVibrationEnabled.collectAsState()
     val isAnthropometryComplete by viewModel.isAnthropometryComplete.collectAsState()
     val scoringEngine by viewModel.scoringEngine.collectAsState()
     val selectedExerciseType by viewModel.selectedExerciseType.collectAsState()
@@ -138,6 +140,17 @@ fun GymProgressApp(viewModel: WorkoutViewModel = viewModel()) {
     val aiLoading by viewModel.aiLoading.collectAsState()
     val errorMessage by viewModel.errorMessage.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
+
+    // Карта «последняя запись по упражнению до сегодня» — для подсказки «Прошлый раз X×Y»
+    // в ActiveWorkoutScreen. Ключ — нормализованное имя (без регистра/пробелов), чтобы
+    // сопоставить запись и упражнение из рекомендации даже при незначительных расхождениях.
+    val lastEntryByExerciseKey = remember(entries) {
+        val today = FormatUtils.toStorageDate(LocalDate.now())
+        entries.asSequence()
+            .filter { it.date < today }
+            .groupBy { FormatUtils.normalizeExerciseNameKey(it.exerciseName) }
+            .mapValues { (_, list) -> list.lastOrNull() }
+    }
 
     // PR-карта: id записи с максимальным оценочным 1RM в рамках упражнения.
     // Используется в Журнале и Истории для отрисовки бейджа.
@@ -347,11 +360,15 @@ fun GymProgressApp(viewModel: WorkoutViewModel = viewModel()) {
                 currentGender = gender,
                 currentHeightCm = heightCm,
                 isAnthropometryComplete = isAnthropometryComplete,
+                timerSoundEnabled = timerSoundEnabled,
+                timerVibrationEnabled = timerVibrationEnabled,
                 onGoalChanged = { viewModel.setTrainingGoal(it) },
                 onBodyWeightChanged = { viewModel.setBodyWeightKg(it) },
                 onScoringSystemChanged = { viewModel.setScoringSystem(it) },
                 onGenderChanged = { viewModel.setGender(it) },
                 onHeightCmChanged = { viewModel.setHeightCm(it) },
+                onTimerSoundEnabledChanged = { viewModel.setTimerSoundEnabled(it) },
+                onTimerVibrationEnabledChanged = { viewModel.setTimerVibrationEnabled(it) },
                 onBack = { popOverlay() },
                 modifier = Modifier.fillMaxSize()
             )
@@ -380,6 +397,9 @@ fun GymProgressApp(viewModel: WorkoutViewModel = viewModel()) {
                             activeWorkoutRec = null
                             popOverlay()
                         },
+                        timerSoundEnabled = timerSoundEnabled,
+                        timerVibrationEnabled = timerVibrationEnabled,
+                        lastEntryByExerciseKey = lastEntryByExerciseKey,
                         modifier = Modifier.fillMaxSize()
                     )
                 }

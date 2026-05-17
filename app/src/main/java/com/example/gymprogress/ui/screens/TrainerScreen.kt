@@ -1,5 +1,7 @@
 package com.example.gymprogress.ui.screens
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -18,11 +20,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -43,11 +42,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.example.gymprogress.data.ExerciseRecommendation
+import com.example.gymprogress.data.FormatUtils
 import com.example.gymprogress.data.MuscleGroup
 import com.example.gymprogress.data.SetType
-import com.example.gymprogress.data.WorkoutRecommendation
-import com.example.gymprogress.data.FormatUtils
 import com.example.gymprogress.data.WorkoutEntry
+import com.example.gymprogress.data.WorkoutRecommendation
 import com.example.gymprogress.ui.theme.CardShape
 import com.example.gymprogress.ui.theme.FabShape
 import com.example.gymprogress.ui.theme.Spacing
@@ -90,7 +89,7 @@ fun TrainerScreen(
         ) {
             Spacer(modifier = Modifier.height(Spacing.md))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onBack, modifier = Modifier.size(40.dp)) {
+                IconButton(onClick = onBack, modifier = Modifier.size(48.dp)) {
                     Icon(
                         Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "Назад",
@@ -105,7 +104,7 @@ fun TrainerScreen(
                     color = MaterialTheme.colorScheme.onBackground,
                     modifier = Modifier.weight(1f)
                 )
-                IconButton(onClick = onOpenSettings, modifier = Modifier.size(40.dp)) {
+                IconButton(onClick = onOpenSettings, modifier = Modifier.size(48.dp)) {
                     Icon(
                         Icons.Default.Settings,
                         contentDescription = "Настройки тренера",

@@ -80,7 +80,7 @@ fun TrainerSettingsScreen(
                 IconButton(onClick = {
                     onSettingsChanged(currentSettings)
                     onBack()
-                }, modifier = Modifier.size(40.dp)) {
+                }, modifier = Modifier.size(48.dp)) {
                     Icon(
                         Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "Назад",

@@ -334,7 +334,7 @@ private fun ExerciseItem(exercise: Exercise, onClick: () -> Unit, onDelete: () -
             }
             IconButton(
                 onClick = onDelete,
-                modifier = Modifier.size(32.dp)
+                modifier = Modifier.size(48.dp)
             ) {
                 Icon(
                     Icons.Default.Delete,

@@ -28,6 +28,8 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -57,11 +59,15 @@ fun SettingsScreen(
     currentGender: Gender?,
     currentHeightCm: Int?,
     isAnthropometryComplete: Boolean,
+    timerSoundEnabled: Boolean,
+    timerVibrationEnabled: Boolean,
     onGoalChanged: (TrainingGoal) -> Unit,
     onBodyWeightChanged: (Double?) -> Unit,
     onScoringSystemChanged: (ScoringSystem) -> Unit,
     onGenderChanged: (Gender?) -> Unit,
     onHeightCmChanged: (Int?) -> Unit,
+    onTimerSoundEnabledChanged: (Boolean) -> Unit,
+    onTimerVibrationEnabledChanged: (Boolean) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -119,7 +125,7 @@ fun SettingsScreen(
                             onBack()
                         }
                     },
-                    modifier = Modifier.size(40.dp)
+                    modifier = Modifier.size(48.dp)
                 ) {
                     Icon(
                         Icons.AutoMirrored.Filled.ArrowBack,
@@ -392,6 +398,37 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(Spacing.xl))
 
+            // ── Активная тренировка ──
+            Text(
+                text = "Активная тренировка",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Spacer(modifier = Modifier.height(Spacing.xxs))
+            Text(
+                text = "Сигнал на финале таймера отдыха",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(Spacing.md))
+
+            TimerSettingSwitch(
+                title = "Звук таймера",
+                subtitle = "Короткие бипы за 3·2·1 сек и длинный по нулю",
+                checked = timerSoundEnabled,
+                onCheckedChange = onTimerSoundEnabledChanged
+            )
+            Spacer(modifier = Modifier.height(Spacing.xs))
+            TimerSettingSwitch(
+                title = "Вибрация таймера",
+                subtitle = "Короткая вибрация на финале отдыха",
+                checked = timerVibrationEnabled,
+                onCheckedChange = onTimerVibrationEnabledChanged
+            )
+
+            Spacer(modifier = Modifier.height(Spacing.xl))
+
             Card(
                 colors = CardDefaults.cardColors(
                     containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
@@ -427,6 +464,51 @@ fun SettingsScreen(
             }
 
             Spacer(modifier = Modifier.height(Spacing.xl))
+        }
+    }
+}
+
+@Composable
+private fun TimerSettingSwitch(
+    title: String,
+    subtitle: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        shape = CardShape
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = Spacing.md, vertical = Spacing.sm),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Switch(
+                checked = checked,
+                onCheckedChange = onCheckedChange,
+                colors = SwitchDefaults.colors(
+                    checkedThumbColor = MaterialTheme.colorScheme.surface,
+                    checkedTrackColor = Volt
+                )
+            )
         }
     }
 }

@@ -50,8 +50,9 @@
 | 7 | Доступность и адаптивность (a11y, fontScale, two-pane на планшете) | M | низкий |
 | 8 | Чистка техдолга (мёртвый код, FK по `exerciseId`, soft-delete) | M | средний |
 | 9 | Опционально: облачная синхронизация через Google Drive `drive.file` | L | высокий |
+| 10 | Абонемент в зал: даты с/по + push за 7 дней до окончания | S | низкий |
 
-Фазы 1, 2, 3, 4 максимально независимы и могут идти параллельно. Фаза 8 — самая инвазивная (миграция БД), её делать после стабилизации остальных.
+Фазы 1, 2, 3, 4, 10 максимально независимы и могут идти параллельно. Фаза 8 — самая инвазивная (миграция БД), её делать после стабилизации остальных.
 
 ---
 
@@ -306,11 +307,8 @@
 
 Возвращаться к этому стоит только в связке с фазой 4.5 (полная ревизия контраста для светлой темы).
 
-### 4.2 Dynamic color (Material You)
-
-Опционально: на Android 12+ использовать `dynamicDarkColorScheme(context)`/`dynamicLightColorScheme(context)`. Управляется флагом «Использовать цвета системы» в настройках. Fallback — `IRON CORE` палитра.
-
-**Риск:** dynamic color теряет «фирменный» Volt/Obsidian-стиль. Сделать **по запросу пользователя**, не по умолчанию.
+### 4.2 Dynamic color (Material You) ⛔ отменено (2026-04-27)
+Идея с подключением `dynamicDarkColorScheme(context)`/`dynamicLightColorScheme(context)` не реализуется: брендовая палитра IRON CORE (Electric Volt + Obsidian) — часть идентичности приложения, и переключение на цвета системы неизбежно ломает её. Пользователю важнее сохранить узнаваемый Volt-стиль, чем поддержать Material You. К фазе можно вернуться только если появится отдельный визуальный стиль под dynamic color (а не подмена бренда).
 
 ### 4.3 Иконки табов ✅ выполнено (2026-04-25)
 В `MainActivity.AppDestinations`:
@@ -365,35 +363,49 @@
 
 Таймер уже есть. Что добавить:
 
-### 6.1 Звук и вибрация на конец таймера
-Сейчас `RestTimer` молча обнуляется. Добавить:
-- 3 коротких бипа за 3/2/1 сек до конца + длинный по нулю (через `RingtoneManager`/`SoundPool`).
-- Вибрацию (`Vibrator`/`VibratorManager`).
-- В настройках — переключатели «Звук таймера», «Вибрация».
+### 6.1 Звук и вибрация на конец таймера ✅ выполнено (2026-04-27)
+- Создан хелпер `ui/components/RestTimerFeedback.kt`: `shortBeep()` (`ToneGenerator.TONE_PROP_BEEP`, 120 мс), `longBeep()` (`TONE_PROP_BEEP2`, 450 мс), `vibrate()` (300 мс через `VibratorManager`/`Vibrator` с compat по API). `rememberRestTimerFeedback()` создаёт инстанс на жизненный цикл composable и освобождает `ToneGenerator` через `DisposableEffect`. При недоступности звукового стека ToneGenerator = `null` — звук просто не сыграет (без падения).
+- В `ActiveWorkoutScreen` в `LaunchedEffect(isResting, restTimeLeft)` после декремента: при `restTimeLeft in 1..3` — короткий бип, при `restTimeLeft == 0` — длинный бип + вибрация. Бипы и вибрация управляются флагами `timerSoundEnabled` / `timerVibrationEnabled`.
+- В `SettingsRepository` — поля `timerSoundEnabled` / `timerVibrationEnabled` (boolean, по умолчанию `true`) с сеттерами; в `WorkoutViewModel` — соответствующие `StateFlow` и `setTimerSoundEnabled` / `setTimerVibrationEnabled` через `safeDb`.
+- В `SettingsScreen` — новый раздел «Активная тренировка» с двумя переключателями (`TimerSettingSwitch`, локальный private composable, по образу `SettingSwitch` из `TrainerSettingsScreen`).
+- В `MainActivity` флаги пробрасываются как в `SettingsScreen`, так и в `ActiveWorkoutScreen`.
+- В `AndroidManifest.xml` добавлено разрешение `android.permission.VIBRATE`.
 
-### 6.2 Foreground service во время сессии
-Сейчас активная тренировка живёт только в Compose-стейте `ActiveWorkoutScreen`. Если пользователь свернул приложение и систем убил процесс — состояние теряется.
+### 6.2 Foreground service во время сессии ✅ выполнено (2026-04-27)
+- `ActiveWorkoutSession` — singleton с `StateFlow<ActiveWorkoutSnapshot?>`, Compose публикует снимок при каждом изменении ключевых полей (`currentExerciseIndex`, `currentSetIndex`, `isResting`, `restTimeLeft`).
+- `ActiveWorkoutService` — `LifecycleService`, стартует при входе на `ActiveWorkoutScreen` (`LaunchedEffect`), останавливается при выходе (`DisposableEffect`).
+- Уведомление: текущее упражнение, подход, общий прогресс (`setProgress`), таймер отдыха. Тап открывает `MainActivity`. `ongoing`, `silent`, `onlyAlertOnce`, категория `workout`.
+- Разрешения: `POST_NOTIFICATIONS` (runtime на API 33+), `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_HEALTH`, `ACTIVITY_RECOGNITION` (для lint на targetSdk 34+).
 
-Завернуть активную тренировку в `ForegroundService` типа `health` (Android 14+) с уведомлением:
-- Иконка + текущее упражнение + текущий подход + таймер.
-- Действия в уведомлении: «Зафиксировать подход», «Завершить».
-- Разрешение `POST_NOTIFICATIONS` на Android 13+ — запрашивать при первом старте тренировки.
+### 6.3 Прогресс по тренировке ✅ выполнено (2026-04-27)
+- В шапке `ActiveWorkoutScreen` (под заголовком и брендовой полоской) — `LinearProgressIndicator` высотой 6dp, цвет `Volt`, трек `surfaceVariant`, скруглённые углы 3dp.
+- `progress = doneSets / totalSets`, где `doneSets = exercises.take(currentExerciseIndex).sumOf { it.sets.size } + currentSetIndex`, `totalSets` — суммарное количество подходов по всем упражнениям рекомендации.
+- Под индикатором — лейбл `"$doneSets / $totalSets подходов"` стилем `labelSmall`.
+- Прогресс анимируется через `animateFloatAsState`.
 
-### 6.3 Прогресс по тренировке
-Линейный `LinearProgressIndicator` в шапке `ActiveWorkoutScreen`: выполнено / всего подходов.
-
-### 6.4 Подсказка «как прошлый раз»
-В блоке текущего подхода — чип «Прошлый раз: 80×8» (брать из `previousSession` или истории по упражнению). Тап заполняет поля.
+### 6.4 Подсказка «как прошлый раз» ✅ выполнено (2026-04-27)
+- В `MainActivity` строится `lastEntryByExerciseKey: Map<String, WorkoutEntry?>` — последняя запись по упражнению строго до сегодняшней даты. Ключ — `FormatUtils.normalizeExerciseNameKey(...)`, чтобы устойчиво сопоставить запись и упражнение из рекомендации (без учёта регистра/неразрывных пробелов). Сортировка `entries` уже `date ASC, id ASC`, поэтому «последняя» — `lastOrNull`.
+- Карта прокидывается в `ActiveWorkoutScreen` как параметр `lastEntryByExerciseKey: Map<String, WorkoutEntry?>` (по умолчанию пустая).
+- Внутри `ActiveWorkoutScreen` для текущего упражнения берётся `previousEntry`, а из `previousEntry.reps` (формат `"n,n,n"`) берётся первое значение как `previousReps`. Это самый «свежий» первый подход прошлой тренировки.
+- В `CurrentSetView` добавлены параметры `previousWeight: Double?`, `previousReps: Int?`, `onApplyPrevious: () -> Unit`. Если оба значения валидны (`previousReps > 0`) — между note и полями ввода рисуется `AssistChip` «Прошлый раз: 80 × 8» (контейнер `surfaceVariant`).
+- Тап на чип заполняет поля `actualWeight` и `actualReps` значениями прошлой тренировки и даёт `haptics.tap()`.
 
 ---
 
 ## Фаза 7. Доступность и адаптивность
 
-### 7.1 contentDescription
-Прогнать все `Icon`/`IconButton` без текста — обязательный `contentDescription` (или `null` явно для декоративных). Запустить lint-правило `ContentDescription` как ошибку.
+### 7.1 contentDescription ✅ выполнено (2026-04-27)
+- Аудит всех `Icon(...)` в проекте: каждое вхождение уже имело `contentDescription`. Интерактивные иконки — со строкой («Назад», «Завершить», «Выбрать дату», «Удалить подход», «Минус 1 повтор», «Плюс 1 повтор», «Личный рекорд», «Добавить ${entry.exerciseName}», «Предыдущий месяц»/«Следующий месяц», «Как считается оценка», «Ещё», «Настройки тренера», «Начать тренировку» и т.п.). Декоративные — с явным `contentDescription = null` (chevron-индикаторы expand/collapse, иконка `Check` рядом с текстом «Зафиксировать подход», иконка `Add` внутри `TextButton("Добавить подход")` рядом с текстом, иконки в `MoreSheetItem` с парным `Text(label)`, плейсхолдер в `EmptyState`).
+- В `app/build.gradle.kts` добавлен блок `lint { error += "ContentDescription"; abortOnError = true }` — отсутствие `contentDescription` теперь даёт ошибку сборки и не уедет в release.
+- `./gradlew lintDebug` — **BUILD SUCCESSFUL**, нарушений `ContentDescription` нет.
 
-### 7.2 Тач-таргеты ≥ 48dp
-Чек-лист по экранам, где могут быть мелкие иконочные кнопки: `JournalScreen` (карточки), графики, степперы.
+### 7.2 Тач-таргеты ≥ 48dp ✅ выполнено (2026-04-27)
+- Аудит всех `IconButton` в проекте на явный размер ниже 48dp.
+- Поднят размер с `Modifier.size(40.dp)` до `Modifier.size(48.dp)` в шапках экранов: `AboutScreen`, `ActiveWorkoutScreen` (кнопка Закрыть), `WorkoutHistoryScreen`, `ExerciseProgressChartScreen`, `SettingsScreen`, `TrainerSettingsScreen`, `TrainerScreen` (Назад + Настройки тренера).
+- В `ExercisesScreen` кнопка удаления упражнения с `Modifier.size(32.dp)` поднята до `Modifier.size(48.dp)` (визуальная иконка остаётся 18dp за счёт внутреннего `Modifier.size(18.dp)` на `Icon`).
+- Остальные `IconButton` (степперы +/− повторов, удаление подхода в диалогах, Previous/Next month, кнопка help в Прогрессе, FAB, IconButton рядом с записью в Журнале) — без явного `size`, по умолчанию Material3 = 48dp.
+- `RadioButton`, `Switch`, `NavigationSuiteScaffold` items сами держат тач-таргет ≥ 48dp.
+- `./gradlew compileDebugKotlin` — **BUILD SUCCESSFUL**.
 
 ### 7.3 fontScale
 Прогнать с `Settings → Display → Font size = Largest` (≈ 1.3x). Не должно быть обрезок и наложений. Использовать `sp` для текста, `dp` для отступов.
@@ -455,6 +467,46 @@
 
 ---
 
+## Фаза 10. Абонемент в зал (план)
+
+Цель — напоминать пользователю о приближающемся окончании абонемента, чтобы он успел продлить его без перерыва в тренировках.
+
+### 10.1 Хранение дат абонемента
+- В `SettingsRepository` добавить два ключа `gym_membership_start` / `gym_membership_end` (формат `yyyy-MM-dd`, тот же `FormatUtils.toStorageDate`). Соответствующие `Flow<LocalDate?>` и сеттеры `setGymMembership(start, end)` / `clearGymMembership()`. Допустимы оба `null`, либо обе даты заполнены и `start <= end`.
+- В `WorkoutViewModel` — `StateFlow<LocalDate?>` для `gymMembershipStart`/`gymMembershipEnd` и метод `setGymMembership(start, end)`/`clearGymMembership()` через `safeDb`.
+
+### 10.2 UI в `SettingsScreen`
+- Новый раздел «Абонемент в зал» (после «Активная тренировка»):
+  - Заголовок + краткое описание «Получите напоминание за 7 дней до окончания».
+  - Два поля даты `OutlinedTextField` (read-only) с открытием Material3 `DatePickerDialog` по тапу/иконке `DateRange`. Лейблы «Действует с» и «Действует по».
+  - Кнопка `TextButton("Очистить даты")` — сбрасывает обе даты и отменяет запланированное уведомление.
+  - Если до окончания ≤ 7 дней — мини-баннер `Card` с текстом «До окончания абонемента осталось N дней (DD.MM.YYYY)». Если уже истёк — «Абонемент истёк DD.MM.YYYY».
+- Валидация: `start <= end`. При нарушении — Snackbar «Дата окончания не может быть раньше даты начала», даты не сохраняются.
+
+### 10.3 Уведомление за 7 дней
+- Использовать **WorkManager** (`androidx.work`) — переживает перезагрузки и не зависит от точных алармов:
+  - Создать `OneTimeWorkRequestBuilder<MembershipReminderWorker>()` с `setInitialDelay(durationUntil(end - 7d))`.
+  - Уникальный тег `"membership_reminder"` через `enqueueUniqueWork(name, ExistingWorkPolicy.REPLACE, request)` — при изменении даты старое уведомление автоматически отменяется.
+  - При `clearGymMembership()` — `WorkManager.getInstance(context).cancelUniqueWork("membership_reminder")`.
+- Если до окончания осталось < 7 дней при сохранении — отправить уведомление **сразу** (delay = 0) и плюс ещё одно за 1 день/в день (если останется время). Фактическое расписание: основное за 7 дней, контрольное за 1 день (см. открытый вопрос).
+- Notification channel `"membership"` создаётся при первом запуске приложения (через `NotificationManagerCompat`). Имя — «Абонемент», важность `IMPORTANCE_DEFAULT`, описание «Напоминание об окончании абонемента в зал».
+- Текст уведомления: заголовок «Абонемент скоро истечёт», тело «До окончания осталось N дней (DD.MM.YYYY). Самое время продлить.». Тап — открывает `MainActivity` через `PendingIntent` с deep-link на `SettingsScreen` (overlay `Settings`).
+
+### 10.4 Разрешения и совместимость
+- `<uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>` (Android 13+).
+- Запрашивать разрешение **только при первом сохранении дат** (не на старте), через `rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission())`. Если пользователь отказал — показать Snackbar «Без разрешения мы не сможем напомнить о продлении» и всё равно сохранить даты (работа запланируется, но уведомление не покажется до выдачи разрешения).
+- На Android < 13 разрешение не требуется.
+
+### 10.5 Тесты
+- Unit-тест `SettingsRepository` — сохранение/чтение дат, валидация `start <= end`.
+- Unit-тест helper-функции `nextReminderDelay(end: LocalDate, now: LocalDate): Duration?` — корректный расчёт задержки (7 дней до `end`, либо 0 если `end - 7 < now < end`, либо `null` если `end < now`).
+- Ручной тест: задать дату через 7 дней + 1 минуту → уведомление должно прийти примерно через минуту.
+
+### 10.6 Зависимости
+- Добавить в `gradle/libs.versions.toml`: `androidx.work:work-runtime-ktx` (актуальная версия, согласовать с `compileSdk = 36`).
+
+---
+
 ## Сквозные требования (для всех фаз)
 
 - Комментарии и сообщения пользователю — **русский**, имена символов и коммиты — **английский**.
@@ -481,5 +533,4 @@
 
 1. **Стратегии импорта в фазе 1.3**: реализовать сразу обе («Объединить» + «Заменить всё») или начать только с «Объединить» + «Отмена»?
 2. **Фаза 8.3 (FK по `exerciseId`)**: делать в связке с фазой 1 (один большой релиз с миграцией) или отложить до отдельного релиза?
-3. **Фаза 4.2 (dynamic color)**: нужна ли вообще, учитывая брендовую палитру IRON CORE? Возможно, ограничиться выбором тёмная/светлая/системная (4.1).
-4. **Фаза 6.2 (foreground service)**: делать сразу или после первой жалобы пользователя на потерю активной тренировки?
+3. **Фаза 10 (абонемент)**: достаточно ли одного уведомления за 7 дней, или добавить второе за 1 день / в день истечения? Хранить только две даты (с/по) или ещё и стоимость/название клуба?

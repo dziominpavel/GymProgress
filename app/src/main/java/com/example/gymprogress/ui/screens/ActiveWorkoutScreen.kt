@@ -1,5 +1,10 @@
 package com.example.gymprogress.ui.screens
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -22,6 +27,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -35,6 +42,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -46,17 +54,24 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
+import com.example.gymprogress.data.ActiveWorkoutSession
+import com.example.gymprogress.data.ActiveWorkoutSnapshot
 import com.example.gymprogress.data.CompletedSet
 import com.example.gymprogress.data.ExerciseRecommendation
 import com.example.gymprogress.data.FormatUtils
 import com.example.gymprogress.data.MuscleGroup
 import com.example.gymprogress.data.SetType
+import com.example.gymprogress.data.WorkoutEntry
 import com.example.gymprogress.data.WorkoutRecommendation
+import com.example.gymprogress.service.ActiveWorkoutService
 import com.example.gymprogress.ui.components.rememberHaptics
+import com.example.gymprogress.ui.components.rememberRestTimerFeedback
 import com.example.gymprogress.ui.theme.CardShape
 import com.example.gymprogress.ui.theme.Spacing
 import com.example.gymprogress.ui.theme.Volt
@@ -67,9 +82,13 @@ fun ActiveWorkoutScreen(
     recommendation: WorkoutRecommendation,
     onFinish: (List<CompletedSet>) -> Unit,
     onCancel: () -> Unit,
+    timerSoundEnabled: Boolean = true,
+    timerVibrationEnabled: Boolean = true,
+    lastEntryByExerciseKey: Map<String, WorkoutEntry?> = emptyMap(),
     modifier: Modifier = Modifier
 ) {
     val haptics = rememberHaptics()
+    val timerFeedback = rememberRestTimerFeedback()
     var showCancelDialog by remember { mutableStateOf(false) }
     var currentExerciseIndex by remember { mutableIntStateOf(0) }
     var currentSetIndex by remember { mutableIntStateOf(0) }
@@ -105,6 +124,16 @@ fun ActiveWorkoutScreen(
         if (isResting && restTimeLeft > 0) {
             delay(1000L)
             restTimeLeft -= 1
+            // Звук/вибрация на финале таймера: 3·2·1 — короткие бипы, 0 — длинный + вибро.
+            when {
+                restTimeLeft == 0 -> {
+                    if (timerSoundEnabled) timerFeedback.longBeep()
+                    if (timerVibrationEnabled) timerFeedback.vibrate()
+                }
+                restTimeLeft in 1..3 -> {
+                    if (timerSoundEnabled) timerFeedback.shortBeep()
+                }
+            }
             if (restTimeLeft <= 0) {
                 isResting = false
             }
@@ -115,6 +144,63 @@ fun ActiveWorkoutScreen(
     val doneSets = exercises.take(currentExerciseIndex).sumOf { it.sets.size } + currentSetIndex
     val progress = if (totalSets > 0) doneSets.toFloat() / totalSets else 0f
     val animatedProgress by animateFloatAsState(targetValue = progress, label = "progress")
+
+    val context = LocalContext.current
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            ActiveWorkoutService.start(context)
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            when {
+                ContextCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.POST_NOTIFICATIONS
+                ) == PackageManager.PERMISSION_GRANTED -> {
+                    ActiveWorkoutService.start(context)
+                }
+                else -> permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        } else {
+            ActiveWorkoutService.start(context)
+        }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            ActiveWorkoutService.stop(context)
+        }
+    }
+
+    // Push snapshot to the foreground service whenever workout state changes.
+    val snapshot = remember(currentExerciseIndex, currentSetIndex, isResting, restTimeLeft) {
+        if (isWorkoutFinished) {
+            null
+        } else {
+            ActiveWorkoutSnapshot(
+                workoutTitle = recommendation.dayLabel,
+                exerciseName = currentExercise?.exercise?.name ?: "",
+                setIndex = currentSetIndex + 1,
+                totalSets = currentExercise?.sets?.size ?: 0,
+                doneSets = doneSets,
+                overallTotalSets = totalSets,
+                restTimeLeft = if (isResting) restTimeLeft else null
+            )
+        }
+    }
+
+    LaunchedEffect(snapshot) {
+        if (snapshot == null) {
+            ActiveWorkoutSession.clear()
+        } else {
+            ActiveWorkoutSession.update(snapshot)
+        }
+    }
 
     Scaffold(
         modifier = modifier,
@@ -132,7 +218,7 @@ fun ActiveWorkoutScreen(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 IconButton(
                     onClick = { showCancelDialog = true },
-                    modifier = Modifier.size(40.dp)
+                    modifier = Modifier.size(48.dp)
                 ) {
                     Icon(
                         Icons.Default.Close,
@@ -212,7 +298,17 @@ fun ActiveWorkoutScreen(
                     }
                 )
             } else if (currentExercise != null && currentSet != null) {
-                // Current set input
+                // Current set input.
+                // Подсказка «Прошлый раз»: ищем последнюю запись по нормализованному имени.
+                val previousEntry = lastEntryByExerciseKey[
+                    FormatUtils.normalizeExerciseNameKey(currentExercise.exercise.name)
+                ]
+                val previousFirstReps = previousEntry
+                    ?.reps
+                    ?.split(",")
+                    ?.firstOrNull()
+                    ?.trim()
+                    ?.toIntOrNull()
                 CurrentSetView(
                     exerciseRec = currentExercise,
                     setIndex = currentSetIndex,
@@ -221,6 +317,15 @@ fun ActiveWorkoutScreen(
                     setType = currentSet.type,
                     actualWeight = actualWeight,
                     actualReps = actualReps,
+                    previousWeight = previousEntry?.weight,
+                    previousReps = previousFirstReps,
+                    onApplyPrevious = {
+                        previousEntry?.let {
+                            actualWeight = FormatUtils.formatWeight(it.weight)
+                        }
+                        previousFirstReps?.let { actualReps = it.toString() }
+                        haptics.tap()
+                    },
                     onWeightChange = { actualWeight = it },
                     onRepsChange = { actualReps = it },
                     onComplete = {
@@ -304,6 +409,9 @@ private fun CurrentSetView(
     setType: SetType,
     actualWeight: String,
     actualReps: String,
+    previousWeight: Double?,
+    previousReps: Int?,
+    onApplyPrevious: () -> Unit,
     onWeightChange: (String) -> Unit,
     onRepsChange: (String) -> Unit,
     onComplete: () -> Unit,
@@ -398,6 +506,24 @@ private fun CurrentSetView(
                             style = MaterialTheme.typography.bodySmall,
                             fontWeight = FontWeight.Medium,
                             color = Volt
+                        )
+                    }
+
+                    if (previousWeight != null && previousReps != null && previousReps > 0) {
+                        Spacer(modifier = Modifier.height(Spacing.sm))
+                        AssistChip(
+                            onClick = onApplyPrevious,
+                            label = {
+                                Text(
+                                    text = "Прошлый раз: ${FormatUtils.formatWeight(previousWeight)} × $previousReps",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            },
+                            colors = AssistChipDefaults.assistChipColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                labelColor = MaterialTheme.colorScheme.onSurface
+                            )
                         )
                     }
 
