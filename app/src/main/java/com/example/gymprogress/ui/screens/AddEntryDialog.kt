@@ -28,8 +28,6 @@ import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material3.AssistChip
-import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
@@ -75,7 +73,6 @@ import com.example.gymprogress.data.SimplifiedScoreCalculator
 import com.example.gymprogress.data.TrainingGoal
 import com.example.gymprogress.data.WorkoutEntry
 import com.example.gymprogress.data.selectBestSessionEntry
-import com.example.gymprogress.ui.components.rememberHaptics
 import com.example.gymprogress.ui.theme.Spacing
 import com.example.gymprogress.ui.theme.Volt
 import kotlinx.coroutines.delay
@@ -548,27 +545,6 @@ fun AddEntryDialog(
                         )
                     }
 
-                    // Степпер веса: -2.5 / -0.5 / +0.5 / +2.5
-                    Spacer(modifier = Modifier.height(Spacing.xs))
-                    StepperRow(
-                        deltas = listOf(-2.5, -0.5, 0.5, 2.5),
-                        enabled = weightFieldEnabled,
-                        onDelta = { delta ->
-                            weightText = stepWeight(weightText, delta)
-                            weightError = false
-                            bodyWeightError = false
-                        },
-                        formatLabel = { d ->
-                            val sign = if (d > 0) "+" else "−"
-                            val absStr = if (kotlin.math.abs(d) == kotlin.math.abs(d).toLong().toDouble()) {
-                                kotlin.math.abs(d).toLong().toString()
-                            } else {
-                                String.format(Locale.US, "%.1f", kotlin.math.abs(d))
-                            }
-                            "$sign$absStr"
-                        }
-                    )
-
                     // Sets
                     Spacer(modifier = Modifier.height(4.dp))
                     Box(
@@ -584,7 +560,6 @@ fun AddEntryDialog(
                                 fontWeight = FontWeight.SemiBold
                             )
 
-                            val repsHaptics = rememberHaptics()
                             setReps.forEachIndexed { index, repsValue ->
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
@@ -609,31 +584,6 @@ fun AddEntryDialog(
                                                 }
                                             }
                                     )
-                                    Spacer(modifier = Modifier.width(Spacing.xs))
-                                    IconButton(
-                                        onClick = {
-                                            repsHaptics.tap()
-                                            setReps[index] = stepReps(setReps[index], -1)
-                                            repsError = false
-                                        }
-                                    ) {
-                                        Icon(
-                                            Icons.Default.KeyboardArrowDown,
-                                            contentDescription = "Минус 1 повтор"
-                                        )
-                                    }
-                                    IconButton(
-                                        onClick = {
-                                            repsHaptics.tap()
-                                            setReps[index] = stepReps(setReps[index], 1)
-                                            repsError = false
-                                        }
-                                    ) {
-                                        Icon(
-                                            Icons.Default.KeyboardArrowUp,
-                                            contentDescription = "Плюс 1 повтор"
-                                        )
-                                    }
                                     if (setReps.size > 1) {
                                         IconButton(onClick = { setReps.removeAt(index) }) {
                                             Icon(
@@ -642,8 +592,6 @@ fun AddEntryDialog(
                                                 tint = MaterialTheme.colorScheme.error
                                             )
                                         }
-                                    } else {
-                                        Spacer(modifier = Modifier.width(48.dp))
                                     }
                                 }
                             }
@@ -787,60 +735,6 @@ fun AddEntryDialog(
             }
         ) {
             DatePicker(state = datePickerState)
-        }
-    }
-}
-
-/** Прибавляет/убавляет [delta] к численному значению веса. Пустое поле трактуется как 0.0. */
-private fun stepWeight(current: String, delta: Double): String {
-    val parsed = current.replace(',', '.').toDoubleOrNull() ?: 0.0
-    val updated = (parsed + delta).coerceAtLeast(0.0)
-    return if (updated == updated.toLong().toDouble()) {
-        updated.toLong().toString()
-    } else {
-        String.format(Locale.US, "%.1f", updated)
-    }
-}
-
-/** Прибавляет/убавляет [delta] к численному значению повторов. Пустое поле трактуется как 0. */
-private fun stepReps(current: String, delta: Int): String {
-    val parsed = current.toIntOrNull() ?: 0
-    val updated = (parsed + delta).coerceAtLeast(0)
-    return updated.toString()
-}
-
-/** Ряд чипов для пошагового изменения значения. Каждое нажатие — лёгкий haptic. */
-@Composable
-private fun StepperRow(
-    deltas: List<Double>,
-    enabled: Boolean,
-    onDelta: (Double) -> Unit,
-    formatLabel: (Double) -> String
-) {
-    val haptics = rememberHaptics()
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
-    ) {
-        deltas.forEach { delta ->
-            AssistChip(
-                onClick = {
-                    haptics.tap()
-                    onDelta(delta)
-                },
-                enabled = enabled,
-                label = {
-                    Text(
-                        text = formatLabel(delta),
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                },
-                colors = AssistChipDefaults.assistChipColors(
-                    labelColor = MaterialTheme.colorScheme.onSurface
-                ),
-                modifier = Modifier.weight(1f)
-            )
         }
     }
 }
