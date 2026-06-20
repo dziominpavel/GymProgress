@@ -10,6 +10,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import java.time.LocalDate
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
 
@@ -32,6 +33,7 @@ class SettingsRepository(private val context: Context) {
     private val chartMetricKey = stringPreferencesKey("chart_metric")
     private val timerSoundKey = booleanPreferencesKey("timer_sound_enabled")
     private val timerVibrationKey = booleanPreferencesKey("timer_vibration_enabled")
+    private val membershipExpiryKey = stringPreferencesKey("membership_expiry")
 
     val trainingGoal: Flow<TrainingGoal> = context.dataStore.data.map { prefs ->
         val name = prefs[goalKey] ?: TrainingGoal.HYPERTROPHY.name
@@ -135,6 +137,27 @@ class SettingsRepository(private val context: Context) {
     suspend fun setTimerVibrationEnabled(value: Boolean) {
         context.dataStore.edit { prefs ->
             prefs[timerVibrationKey] = value
+        }
+    }
+
+    /** Дата окончания абонемента (ISO `LocalDate.toString()`). `null` — не указана. */
+    val membershipExpiryDate: Flow<LocalDate?> = context.dataStore.data.map { prefs ->
+        prefs[membershipExpiryKey]?.let { raw ->
+            try {
+                LocalDate.parse(raw)
+            } catch (_: Exception) {
+                null
+            }
+        }
+    }
+
+    suspend fun setMembershipExpiryDate(value: LocalDate?) {
+        context.dataStore.edit { prefs ->
+            if (value == null) {
+                prefs.remove(membershipExpiryKey)
+            } else {
+                prefs[membershipExpiryKey] = value.toString()
+            }
         }
     }
 

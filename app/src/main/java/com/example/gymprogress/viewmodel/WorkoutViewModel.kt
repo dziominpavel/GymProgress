@@ -25,6 +25,7 @@ import com.example.gymprogress.data.TrainingGoal
 import com.example.gymprogress.data.WorkoutEntry
 import com.example.gymprogress.data.WorkoutRecommendation
 import com.example.gymprogress.data.WorkoutScoreCalculator
+import com.example.gymprogress.service.MembershipReminderScheduler
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -109,6 +110,9 @@ class WorkoutViewModel(application: Application) : AndroidViewModel(application)
 
     val timerVibrationEnabled: StateFlow<Boolean> = settingsRepository.timerVibrationEnabled
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
+
+    val membershipExpiryDate: StateFlow<LocalDate?> = settingsRepository.membershipExpiryDate
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     val isAnthropometryComplete: StateFlow<Boolean> = settingsRepository.isAnthropometryComplete
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
@@ -424,6 +428,12 @@ class WorkoutViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    fun setMembershipExpiryDate(value: LocalDate?) {
+        safeDb("Не удалось сохранить дату абонемента") {
+            settingsRepository.setMembershipExpiryDate(value)
+        }
+    }
+
     fun updateTrainerSettings(settings: TrainerSettings) {
         safeDb("Не удалось сохранить настройки тренера") {
             settingsRepository.updateTrainerSettings(settings)
@@ -541,6 +551,21 @@ class WorkoutViewModel(application: Application) : AndroidViewModel(application)
         if (toInsert.isEmpty()) return
         safeDb("Не удалось сохранить тренировку") {
             workoutDao.insertEntries(toInsert)
+        }
+    }
+
+    init {
+        // Перепланируем ежедневную проверку срока абонемента при изменении даты.
+        // null → отменяем воркер; не-null → перепланируем с пересчётом initialDelay.
+        viewModelScope.launch {
+            membershipExpiryDate.collect { expiry ->
+                val context = getApplication<Application>()
+                if (expiry == null) {
+                    MembershipReminderScheduler.cancel(context)
+                } else {
+                    MembershipReminderScheduler.schedule(context)
+                }
+            }
         }
     }
 
