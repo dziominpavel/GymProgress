@@ -131,6 +131,7 @@ fun GymProgressApp(viewModel: WorkoutViewModel = viewModel()) {
     val chartMetric by viewModel.chartMetric.collectAsState()
     val timerSoundEnabled by viewModel.timerSoundEnabled.collectAsState()
     val timerVibrationEnabled by viewModel.timerVibrationEnabled.collectAsState()
+    val membershipExpiryDate by viewModel.membershipExpiryDate.collectAsState()
     val isAnthropometryComplete by viewModel.isAnthropometryComplete.collectAsState()
     val scoringEngine by viewModel.scoringEngine.collectAsState()
     val selectedExerciseType by viewModel.selectedExerciseType.collectAsState()
@@ -362,6 +363,7 @@ fun GymProgressApp(viewModel: WorkoutViewModel = viewModel()) {
                 isAnthropometryComplete = isAnthropometryComplete,
                 timerSoundEnabled = timerSoundEnabled,
                 timerVibrationEnabled = timerVibrationEnabled,
+                membershipExpiryDate = membershipExpiryDate,
                 onGoalChanged = { viewModel.setTrainingGoal(it) },
                 onBodyWeightChanged = { viewModel.setBodyWeightKg(it) },
                 onScoringSystemChanged = { viewModel.setScoringSystem(it) },
@@ -369,6 +371,7 @@ fun GymProgressApp(viewModel: WorkoutViewModel = viewModel()) {
                 onHeightCmChanged = { viewModel.setHeightCm(it) },
                 onTimerSoundEnabledChanged = { viewModel.setTimerSoundEnabled(it) },
                 onTimerVibrationEnabledChanged = { viewModel.setTimerVibrationEnabled(it) },
+                onMembershipExpiryDateChanged = { viewModel.setMembershipExpiryDate(it) },
                 onBack = { popOverlay() },
                 modifier = Modifier.fillMaxSize()
             )

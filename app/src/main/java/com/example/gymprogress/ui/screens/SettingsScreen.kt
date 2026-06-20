@@ -19,8 +19,13 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -28,10 +33,12 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SelectableDates
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -50,7 +57,11 @@ import com.example.gymprogress.data.TrainingGoal
 import com.example.gymprogress.ui.theme.CardShape
 import com.example.gymprogress.ui.theme.Spacing
 import com.example.gymprogress.ui.theme.Volt
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     currentGoal: TrainingGoal,
@@ -61,6 +72,7 @@ fun SettingsScreen(
     isAnthropometryComplete: Boolean,
     timerSoundEnabled: Boolean,
     timerVibrationEnabled: Boolean,
+    membershipExpiryDate: LocalDate?,
     onGoalChanged: (TrainingGoal) -> Unit,
     onBodyWeightChanged: (Double?) -> Unit,
     onScoringSystemChanged: (ScoringSystem) -> Unit,
@@ -68,6 +80,7 @@ fun SettingsScreen(
     onHeightCmChanged: (Int?) -> Unit,
     onTimerSoundEnabledChanged: (Boolean) -> Unit,
     onTimerVibrationEnabledChanged: (Boolean) -> Unit,
+    onMembershipExpiryDateChanged: (LocalDate?) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -79,6 +92,7 @@ fun SettingsScreen(
         mutableStateOf(currentHeightCm?.toString() ?: "")
     }
     var heightError by remember { mutableStateOf(false) }
+    var showMembershipDatePicker by remember { mutableStateOf(false) }
     fun saveAll(): Boolean {
         var ok = true
         val bwValue = bodyWeightText.replace(",", ".").toDoubleOrNull()
@@ -429,6 +443,80 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(Spacing.xl))
 
+            // ── Абонемент ──
+            Text(
+                text = "Дата окончания абонемента",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Spacer(modifier = Modifier.height(Spacing.xxs))
+            Text(
+                text = "За 7 дней до окончания придёт напоминание о продлении",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(Spacing.md))
+
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(CardShape)
+                    .clickable { showMembershipDatePicker = true },
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surface
+                ),
+                shape = CardShape
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = Spacing.md, vertical = Spacing.sm),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.CalendarMonth,
+                        contentDescription = null,
+                        tint = Volt
+                    )
+                    Spacer(modifier = Modifier.width(Spacing.sm))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = if (membershipExpiryDate != null) {
+                                FormatUtils.formatDate(membershipExpiryDate.toString())
+                            } else {
+                                "Не указано"
+                            },
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = if (membershipExpiryDate != null) {
+                                MaterialTheme.colorScheme.onSurface
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            }
+                        )
+                        if (membershipExpiryDate == null) {
+                            Text(
+                                text = "Нажмите, чтобы выбрать дату",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    if (membershipExpiryDate != null) {
+                        IconButton(onClick = { onMembershipExpiryDateChanged(null) }) {
+                            Icon(
+                                imageVector = Icons.Filled.Close,
+                                contentDescription = "Очистить дату",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(Spacing.xl))
+
             Card(
                 colors = CardDefaults.cardColors(
                     containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
@@ -464,6 +552,49 @@ fun SettingsScreen(
             }
 
             Spacer(modifier = Modifier.height(Spacing.xl))
+        }
+    }
+
+    if (showMembershipDatePicker) {
+        val datePickerState = rememberDatePickerState(
+            initialSelectedDateMillis = (membershipExpiryDate ?: LocalDate.now(ZoneId.systemDefault()))
+                .atStartOfDay(ZoneId.systemDefault())
+                .toInstant()
+                .toEpochMilli(),
+            selectableDates = object : SelectableDates {
+                override fun isSelectableDate(utcTimeMillis: Long): Boolean {
+                    // Сравниваем по дням в системном TZ, чтобы запретить прошедшие даты.
+                    val selectedDay = Instant.ofEpochMilli(utcTimeMillis)
+                        .atZone(ZoneId.systemDefault())
+                        .toLocalDate()
+                    val today = LocalDate.now(ZoneId.systemDefault())
+                    return !selectedDay.isBefore(today)
+                }
+            }
+        )
+
+        DatePickerDialog(
+            onDismissRequest = { showMembershipDatePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    datePickerState.selectedDateMillis?.let { millis ->
+                        val selected = Instant.ofEpochMilli(millis)
+                            .atZone(ZoneId.systemDefault())
+                            .toLocalDate()
+                        onMembershipExpiryDateChanged(selected)
+                    }
+                    showMembershipDatePicker = false
+                }) {
+                    Text("OK")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showMembershipDatePicker = false }) {
+                    Text("Отмена")
+                }
+            }
+        ) {
+            DatePicker(state = datePickerState)
         }
     }
 }
