@@ -1,0 +1,4 @@
+name: GymProgress
+description: "Дневник тренировок в зале: подходы, вес и повторы, расчёт E1RM и оценка усилия, статистика прогресса по упражнениям."
+icon: assets/icon.png
+requirements: "Android 10+"
