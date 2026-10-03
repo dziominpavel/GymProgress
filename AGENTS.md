@@ -15,7 +15,7 @@ Android-приложение на **Kotlin** для учёта силовых т
 - Экраны: `app/src/main/java/com/example/gymprogress/ui/screens/*.kt`
 - Тема: `ui/theme/` (Color/Type/Shape/Dimens/Theme); компоненты: `ui/components/` (`MuscleGroupIcon`, `EmptyState`, `HapticHelper`, `RestTimerFeedback`)
 - Данные: `data/` — Room (AppDatabase, WorkoutDao, ExerciseDao), SettingsRepository, TrainerRecommendationEngine, две системы скоринга (`SimplifiedScoreCalculator`, `WorkoutScoreCalculator`) поверх `ScoringEngine`, AiService
-- Версия: `version.properties`; при assemble/install/bundle автоматически увеличивается patch
+- Версия: файл `version` (меняет только release-скрипт); автобампа при сборке нет
 
 ### Документация (обязательно учитывать)
 - `docs/DESIGN_SYSTEM.md` — дизайн-система IRON CORE: единственный акцент — **Electric Volt** (`#D1FF00`) на тёмной палитре Obsidian/Carbon, типографика Roboto, токены `Spacing`/`Dimens`/`CardShape`/`FabShape`/`ButtonShape`. Общих компонентов `GymCard`/`GymPrimaryButton` и т.п. пока нет — собирать из Material-примитивов.
@@ -28,7 +28,7 @@ Android-приложение на **Kotlin** для учёта силовых т
 
 ## Перед изменениями
 1. **Сверяйся с документацией:** при работе с UI — `docs/DESIGN_SYSTEM.md`, со скорингом — `docs/TRAINING_SCORING_REFERENCE.md`, с известными проблемами — `docs/POTENTIAL_ERRORS_ANALYSIS.md`, общий вектор — `docs/IMPROVEMENT_PLAN.md`.
-2. **Версии и сборка:** зависимости из `gradle/libs.versions.toml`; версия приложения в `version.properties`; при assemble/install/bundle patch увеличивается автоматически.
+2. **Версии и сборка:** зависимости из `gradle/libs.versions.toml`; версия приложения в файле `version` — автобампа при assemble/install/bundle нет.
 
 ## Приоритеты при доработках
 - Не ломать существующую навигацию и единственный ViewModel: экраны получают данные и колбэки из `WorkoutViewModel`.
@@ -63,3 +63,19 @@ Android-приложение на **Kotlin** для учёта силовых т
 - Мелкие правки (опечатка, точечный багфикс) — можно напрямую без OpenSpec.
 - Спеки и changes лежат в `openspec/` и коммитятся в git вместе с кодом.
 - 
+
+<!-- versioning:begin -->
+## Версии и changelog (обязательно)
+
+- Версия проекта меняется **только в момент релиза**: бамп вне релиза запрещён,
+  между релизами номер остаётся номером последнего релиза. У статического трека
+  версия заморожена и не меняется вовсе.
+- Каждая пользовательская правка сопровождается пунктом в секции `## [Unreleased]`
+  файла `CHANGELOG.md` — в момент работы, а не перед релизом. Чистые доки, спеки,
+  тесты, CI и внутренний рефактор в changelog не пишутся.
+- Релиз (где есть конвейер): `release.ps1 -Prepare` → сборка артефактов в `dist/`
+  → `release.ps1`. Порядок не меняется.
+- Сверка перед работой и после: `python scripts/check-version.py`
+  (exit 0 — версия и changelog согласованы, exit 1 — рассинхрон).
+- Полные правила и запреты: `docs/versioning.md`.
+<!-- versioning:end -->
