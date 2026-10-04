@@ -1,0 +1,23 @@
+schema: spec-driven
+
+context: |
+  GymProgress — Android-приложение учёта силовых тренировок (Kotlin, Compose, Room, DataStore).
+  Продукт: журнал тренировок, справочник упражнений, статистика прогресса, «Тренер» с рекомендациями.
+  UI-тексты приложения — русские. OpenSpec-артефакты (proposal, design, tasks, specs) — тоже русские,
+  кроме normative keywords MUST/SHALL/MUST NOT и заголовков сценариев WHEN/THEN/AND.
+
+rules:
+  specs:
+    - "Текст requirements и сценариев — русский"
+    - "В каждом ### Requirement: обязательно MUST, SHALL или MUST NOT (не «ДОЛЖЕН») — иначе validate падает"
+    - "Main spec (openspec/specs/): секции ## Purpose и ## Requirements"
+    - "Delta spec (openspec/changes/*/specs/): ## ADDED/MODIFIED/REMOVED Requirements"
+    - "Каждый requirement — минимум один #### Scenario: с WHEN/THEN"
+    - "Capability = подсистема (workout-logging, exercise-catalog, statistics, trainer), не отдельная фича"
+    - "После правок запускать openspec validate --all"
+  proposal:
+    - "Русский язык, кратко: что и зачем"
+  design:
+    - "Русский язык: как реализовать, trade-offs"
+  tasks:
+    - "Русский язык, чекбоксы - [ ] / - [x]"
