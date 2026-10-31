@@ -50,19 +50,24 @@ Android-приложение на **Kotlin** для учёта силовых т
 - При предложении рефакторинга учитывать `docs/POTENTIAL_ERRORS_ANALYSIS.md` (даты, миграции, целостность данных, дубликаты, обработка ошибок).
 
 ## OpenSpec (spec-driven development)
-Проект инициализирован под OpenSpec. Структура: `openspec/` (`specs/`, `changes/`, `changes/archive/`). Скиллы и slash-команды установлены для Cursor (`.cursor/skills/openspec-*`, `.cursor/commands/opsx-*.md`) и Devin Desktop (`.windsurf/skills/openspec-*`, `.windsurf/workflows/opsx-*.md`).
+Проект инициализирован под OpenSpec. Структура: `openspec/` (`specs/`, `changes/`, `changes/archive/`). Сгенерированные скиллы и slash-команды лежат в:
+- Cursor — `.cursor/skills/openspec-*`, `.cursor/commands/opsx-*.md`;
+- Devin Desktop — `.devin/skills/openspec-*`, `.devin/workflows/opsx-*.md`;
+- OpenCode — `.opencode/skills/openspec-*`, `.opencode/commands/opsx-*.md`.
 
 ### Workflow
-- `/opsx:propose <idea>` — создать change с артефактами (proposal.md, design.md, tasks.md, specs/).
-- `/opsx:apply` — реализовать задачи из текущего change по спеке.
-- `/opsx:archive` — заархивировать завершённый change и обновить основные specs.
-- `/opsx:explore` — исследовать кодовую базу перед предложением.
+- `/opsx-propose <idea>` — создать change с артефактами (proposal.md, design.md, tasks.md, specs/).
+- `/opsx-apply` — реализовать задачи из текущего change по спеке.
+- `/opsx-archive` — заархивировать завершённый change и обновить основные specs.
+- `/opsx-explore` — исследовать кодовую базу перед предложением.
+- `/opsx-update` — обновить артефакты существующего change.
+- `/opsx-sync` — синхронизировать delta-спеку с основной без архивации.
 
 ### Когда использовать
 - Новые фичи и нетривиальные изменения — через OpenSpec (propose → review → apply → archive).
 - Мелкие правки (опечатка, точечный багфикс) — можно напрямую без OpenSpec.
 - Спеки и changes лежат в `openspec/` и коммитятся в git вместе с кодом.
-- 
+- После обновления CLI: `openspec update`, затем перезапуск IDE (OpenCode подхватывает команды сам).
 
 <!-- versioning:begin -->
 ## Версии и changelog (обязательно)
