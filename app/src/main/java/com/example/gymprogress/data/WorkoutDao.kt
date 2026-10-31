@@ -30,6 +30,15 @@ interface WorkoutDao {
     @Query("SELECT * FROM workout_entries WHERE exerciseName = :name ORDER BY date ASC, id ASC")
     fun getEntriesByExercise(name: String): Flow<List<WorkoutEntry>>
 
+    @Query("SELECT * FROM workout_entries WHERE exerciseId = :exerciseId ORDER BY date ASC, id ASC")
+    fun getEntriesByExerciseId(exerciseId: Long): Flow<List<WorkoutEntry>>
+
+    @Query("UPDATE workout_entries SET exerciseName = :newName WHERE exerciseId = :exerciseId")
+    suspend fun updateExerciseNameForEntries(exerciseId: Long, newName: String)
+
+    @Query("SELECT COUNT(*) FROM workout_entries WHERE exerciseId = :exerciseId")
+    suspend fun countEntriesByExerciseId(exerciseId: Long): Int
+
     @Query("UPDATE workout_entries SET exerciseName = :newName WHERE exerciseName = :oldName")
     suspend fun renameExercise(oldName: String, newName: String)
 }

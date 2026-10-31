@@ -1,9 +1,8 @@
 # План улучшений GymProgress
 
-> Статус: **план, без реализации**.
+> Статус: **частично реализован**; актуальный статус фаз — в разделах ниже.
 > Источник истины — только реальный код в `app/src/main/java/com/example/gymprogress/...`.
-> Прочая документация в `docs/` будет отрефакторена позднее отдельной задачей и здесь не цитируется.
-> Дата составления: 2026-04-25.
+> Дата составления: 2026-04-25; последняя сверка: 2026-10-31.
 
 ---
 
@@ -12,18 +11,18 @@
 Чтобы план не повторял уже сделанное, фиксирую baseline:
 
 - **Дата записей** хранится как `String` в формате ISO `yyyy-MM-dd` (`FormatUtils.STORAGE_DATE_PATTERN`). Сортировка `ORDER BY date ASC, id ASC` корректна. Миграция со старого формата `dd.MM.yyyy` уже выполнена в `MIGRATION_5_6`. **Перевод даты в `Long` не нужен.**
-- **БД** — Room, версия 6, явные миграции `MIGRATION_2_3 … MIGRATION_5_6`, `fallbackToDestructiveMigration` отсутствует.
-- **Уникальный индекс** `Index(value = ["name"], unique = true)` на `Exercise.name` есть (миграция 3→4). Однако индекс **case-sensitive**, и UI до вставки уникальность не проверяет — опираемся на `SQLiteConstraintException` через `safeDb`.
-- **Связь записей и упражнений** — по строке `WorkoutEntry.exerciseName`, **нет `exerciseId` и FK**. Переименование частично пробрасывается через `WorkoutDao.renameExercise()`. Удаление упражнения оставляет «висячие» записи.
+- **БД** — Room, версия 7, явные миграции `MIGRATION_2_3 … MIGRATION_6_7`, `fallbackToDestructiveMigration` отсутствует.
+- **Уникальность упражнений** — `Exercise.nameKey` (Kotlin-нормализация регистра/пробелов/NBSP) и уникальный индекс (миграция 6→7). UI проверяет тот же ключ; архивные упражнения тоже участвуют в проверке.
+- **Связь записей и упражнений** — `WorkoutEntry.exerciseId` с FK на `Exercise.id` (`ON DELETE SET NULL`), `clientId` у упражнений и записей. `exerciseName` остаётся денормализованным для отображения и «сиротских» записей; переименование обновляет его в транзакции.
 - **Обработка ошибок БД** — реализована: `WorkoutViewModel.safeDb` обёртывает все мутации, ошибки публикуются в `errorMessage`, `MainActivity` показывает их в Snackbar.
-- **Auto Backup** — флаг `android:allowBackup="true"` в манифесте есть, но `res/xml/backup_rules.xml` и `res/xml/data_extraction_rules.xml` **пустые шаблоны** без правил `<include>` для БД и DataStore. Бэкап работает с дефолтным поведением, но не гарантирует включение нужных файлов.
+- **Auto Backup** — `res/xml/backup_rules.xml` и `res/xml/data_extraction_rules.xml` содержат явные `<include>` для БД Room и DataStore. Осталась ручная проверка восстановления на устройстве.
 - **FAB «Добавить»** на `JournalScreen` — уже есть (`floatingActionButton = { FloatingActionButton(...) }`).
 - **Таймер отдыха** в `ActiveWorkoutScreen` — реализован (`isResting`, `restTimeLeft`, composable `RestTimer`).
 - **Числовые клавиатуры** в `AddEntryDialog` — `KeyboardType.Decimal` для веса, `KeyboardType.Number` для повторов.
 - **`StatsScreen`** строит выпадающий список упражнений из справочника `allExercises` — смешения источников нет.
 - **Тема** — Material 3 со своими токенами (`Volt`, `Obsidian`, `Carbon` и т.д.), но `GymProgressTheme(darkTheme = true)` **жёстко зашита** на тёмную тему. Светлая схема описана в `Theme.kt`, но не используется. Dynamic color (Material You) не подключён.
-- **Навигация** — `NavigationSuiteScaffold` для табов (Журнал/Прогресс/Упражнения) + кастомный пункт «Ещё» с `DropdownMenu`. Вторичные экраны (история, настройки, тренер, активная тренировка, график) реализованы как overlay-флаги в `MainActivity` через `AppOverlayState` + `BackHandler`. Анимаций перехода между overlay нет.
-- **Мёртвый код:** `WorkoutViewModel.exerciseNames` и `WorkoutDao.getAllExerciseNames()` объявлены, но не используются ни в одном экране.
+- **Навигация** — `NavigationSuiteScaffold` для табов (Журнал/Прогресс/Упражнения) + «Ещё» через `ModalBottomSheet`; вторичные экраны — стек `AppOverlay` с анимациями и единым `BackHandler`.
+- **Мёртвый код:** `WorkoutViewModel.exerciseNames` и `WorkoutDao.getAllExerciseNames()` удалены.
 
 ---
 
@@ -424,31 +423,24 @@
 - Удалены `WorkoutViewModel.exerciseNames` и `WorkoutDao.getAllExerciseNames()`.
 - Сборка `compileDebugKotlin` зелёная.
 
-### 8.2 Case-insensitive уникальность упражнений + UI-проверка ✅ выполнено частично (2026-04-25)
-- `ExerciseDao.countByNormalizedName(name, excludeId)` — SQL `LOWER(TRIM(REPLACE(name, char(160), ' ')))` для case-insensitive и неразрывных пробелов.
-- `WorkoutViewModel.addExercise` и `updateExercise` проверяют `countByNormalizedName(normalizeExerciseNameKey(name))` до вставки. При дублях — понятное сообщение в `errorMessage` (Snackbar). При пустом имени — тоже ругаемся.
+### 8.2 Case-insensitive уникальность упражнений + UI-проверка ✅ выполнено (2026-10-31)
+- `Exercise.nameKey` вычисляется в Kotlin через `FormatUtils.normalizeExerciseNameKey` (регистр, пробелы, NBSP) и хранится в БД с уникальным индексом (`MIGRATION_6_7`).
+- `WorkoutViewModel.addExercise`/`updateExercise` проверяют `ExerciseDao.countByNameKey`; при дубле показывается сообщение в `errorMessage` (Snackbar), при архивном дубле — предложение восстановить.
+- Маппинг `SQLiteConstraintException` остаётся общим через `safeDb`; отдельное сообщение для race conditions не добавлялось.
 
-**Что осталось (отложено):**
-- Миграция базы данных для индекса `COLLATE NOCASE` (или `nameKey`-колонки) — жёсткая защита на уровне СУБД. Сделаем вместе с фазой 8.3 (FK + clientId), чтобы все миграции схемы были в одном релизе.
-- Маппинг `SQLiteConstraintException` в понятное сообщение (сейчас UI-проверки хватает в 99% сценариев, но возможны race conditions).
+### 8.3 FK `WorkoutEntry.exerciseId → Exercise.id` ✅ выполнено (2026-10-31)
+- `MIGRATION_6_7` добавляет `Exercise.clientId`, `WorkoutEntry.clientId` и `WorkoutEntry.exerciseId`; заполняет связи по нормализованному имени и пересобирает таблицы с FK `ON DELETE SET NULL`.
+- `clientId` — UUID v4, уникальный; `exerciseName` остаётся денормализованным и обновляется при переименовании.
+- `WorkoutDao.getEntriesByExerciseId` используется для выборки; `getEntriesByExercise(name)` оставлен как fallback для «сирот».
+- Миграция покрыта `MigrationTestHelper` на схеме версии 6 (дубликаты, NBSP, сироты, SET NULL).
 
-### 8.3 FK `WorkoutEntry.exerciseId → Exercise.id` (большой шаг)
-Самая инвазивная правка. Делать в **одной связке** с фазой 1 (для бэкапа всё равно нужен `clientId`):
-1. Миграция: добавить `Exercise.clientId TEXT UNIQUE` и `WorkoutEntry.clientId TEXT UNIQUE` и `WorkoutEntry.exerciseId INTEGER`.
-2. Заполнить `exerciseId` через `JOIN ON exercises.name = workout_entries.exerciseName` (нормализуя пробелы/регистр через SQL `LOWER(TRIM(...))`).
-3. Сирот (записи без совпадения по имени) — оставить с `exerciseId = NULL` или создать «архивные» упражнения автоматически.
-4. Включить `ForeignKey(onDelete = SET_NULL)` или `CASCADE` (см. 8.4).
-5. Заменить `WorkoutDao.getEntriesByExercise(name)` на запрос по `exerciseId`.
-6. Поле `exerciseName` оставить как **денормализованное** для backwards compatibility и текстового поиска, обновлять при `renameExercise`.
+**Остаток:** ручная проверка на реальном дампе версии 6 (см. `POTENTIAL_ERRORS_ANALYSIS.md`).
 
-**Риск:** миграция на пользовательских данных. Обязательно `androidTest` с реальным дампом.
-
-### 8.4 Soft-delete упражнений (вместо CASCADE)
+### 8.4 Soft-delete упражнений (вместо CASCADE) ✅ выполнено (2026-10-31)
 - `Exercise.isArchived: Boolean = false`.
-- В списках выбора и каталоге архивные не показываются.
-- История по архивному упражнению продолжает работать (есть `exerciseId`).
-- В настройках раздел «Архив» с восстановлением.
-- При клике «Удалить» в `ExercisesScreen` — спросить «Архивировать или удалить навсегда?».
+- Архивные упражнения не показываются в выборе для новых записей и в рекомендациях тренера, но остаются в истории и статистике.
+- В `ExercisesScreen` есть режим «Архив», действия «В архив», «Восстановить» и «Удалить навсегда» с предупреждением.
+- Окончательное удаление сохраняет записи: FK `SET NULL`, `exerciseName` остаётся прежним.
 
 ---
 
@@ -538,5 +530,5 @@
 ## Открытые вопросы для согласования
 
 1. **Стратегии импорта в фазе 1.3**: реализовать сразу обе («Объединить» + «Заменить всё») или начать только с «Объединить» + «Отмена»?
-2. **Фаза 8.3 (FK по `exerciseId`)**: делать в связке с фазой 1 (один большой релиз с миграцией) или отложить до отдельного релиза?
+2. **Фаза 8.3 (FK по `exerciseId`)**: ✅ решено — реализовано отдельным change `exercise-identity-and-archive`; `clientId` уже готов для будущего импорта.
 3. **Фаза 10 (абонемент)**: достаточно ли одного уведомления за 7 дней, или добавить второе за 1 день / в день истечения? Хранить только две даты (с/по) или ещё и стоимость/название клуба?

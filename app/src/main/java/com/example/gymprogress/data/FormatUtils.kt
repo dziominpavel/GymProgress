@@ -97,6 +97,15 @@ object FormatUtils {
         }
     }
 
+    /** Находит упражнение для записи: сначала по стабильному id, затем по нормализованному имени. */
+    fun findExerciseForEntry(entry: WorkoutEntry, exercises: List<Exercise>): Exercise? {
+        entry.exerciseId?.let { id ->
+            exercises.firstOrNull { it.id == id }?.let { return it }
+        }
+        val key = normalizeExerciseNameKey(entry.exerciseName)
+        return exercises.firstOrNull { normalizeExerciseNameKey(it.name) == key }
+    }
+
     /** Находит упражнение в справочнике по строке из записи журнала. */
     fun findExerciseByStoredName(exercises: List<Exercise>, storedExerciseName: String): Exercise? {
         val t = storedExerciseName.trim()

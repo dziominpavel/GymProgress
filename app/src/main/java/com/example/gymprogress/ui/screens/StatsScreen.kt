@@ -213,7 +213,10 @@ fun StatsScreen(
                 onExpandedChange = { expanded = it }
             ) {
                 OutlinedTextField(
-                    value = selectedExercise ?: "",
+                    value = selectedExercise
+                        ?.let { name -> exercises.find { it.name == name } }
+                        ?.let(::exerciseDisplayName)
+                        ?: "",
                     onValueChange = {},
                     readOnly = true,
                     label = { Text("Выберите упражнение") },
@@ -268,7 +271,7 @@ fun StatsScreen(
                                 DropdownMenuItem(
                                     text = {
                                         Text(
-                                            text = "•  ${exercise.name}",
+                                            text = "•  ${exerciseDisplayName(exercise)}",
                                             style = MaterialTheme.typography.bodyLarge,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
@@ -427,8 +430,15 @@ fun StatsScreen(
                 { name ->
                     val ex = exercises.find { it.name == name }
                     val isBw = ex?.isBodyweight ?: false
+                    val exerciseId = ex?.id
                     allEntries.asSequence()
-                        .filter { it.exerciseName == name }
+                        .filter { entry ->
+                            if (exerciseId != null && entry.exerciseId != null) {
+                                entry.exerciseId == exerciseId
+                            } else {
+                                entry.exerciseName == name
+                            }
+                        }
                         .sortedWith(compareBy({ it.date }, { it.id }))
                         .toList()
                         .takeLast(8)
@@ -473,9 +483,17 @@ fun StatsScreen(
                 { name ->
                     val ex = exercises.find { it.name == name }
                     val isBw = ex?.isBodyweight ?: false
+                    val exerciseId = ex?.id
                     val upTo = storageDate ?: ""
                     allEntries.asSequence()
-                        .filter { it.exerciseName == name && it.date <= upTo }
+                        .filter { entry ->
+                            val matchesExercise = if (exerciseId != null && entry.exerciseId != null) {
+                                entry.exerciseId == exerciseId
+                            } else {
+                                entry.exerciseName == name
+                            }
+                            matchesExercise && entry.date <= upTo
+                        }
                         .sortedWith(compareBy({ it.date }, { it.id }))
                         .toList()
                         .takeLast(8)
@@ -523,3 +541,6 @@ fun StatsScreen(
     }
     }
 }
+
+private fun exerciseDisplayName(exercise: Exercise): String =
+    if (exercise.isArchived) "${exercise.name} (архив)" else exercise.name

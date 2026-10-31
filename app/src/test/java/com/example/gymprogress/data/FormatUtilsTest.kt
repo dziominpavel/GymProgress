@@ -18,4 +18,19 @@ class FormatUtilsTest {
         val s = FormatUtils.formatJournalDayMonth(LocalDate.of(2026, 4, 4))
         assert(s.any { it.isLetter() }) { "expected non-empty formatted date" }
     }
+
+    @Test
+    fun normalizeExerciseNameKey_ignoresCyrillicCase() {
+        assertEquals(
+            FormatUtils.normalizeExerciseNameKey("ЖИМ ЛЁЖА"),
+            FormatUtils.normalizeExerciseNameKey("жим лёжа")
+        )
+    }
+
+    @Test
+    fun normalizeExerciseNameKey_collapsesNonBreakingAndRepeatedSpaces() {
+        val expected = FormatUtils.normalizeExerciseNameKey("жим лёжа")
+        assertEquals(expected, FormatUtils.normalizeExerciseNameKey("  Жим\u00A0лёжа  "))
+        assertEquals(expected, FormatUtils.normalizeExerciseNameKey("Жим    лёжа"))
+    }
 }

@@ -115,12 +115,20 @@ fun AddEntryDialog(
     var bodyWeightError by remember { mutableStateOf(false) }
     var repsError by remember { mutableStateOf(false) }
 
+    val activeExercises = remember(exercises) { exercises.filter { !it.isArchived } }
+    val preselectedArchived = remember(preselectedExercise, exercises) {
+        preselectedExercise?.let { name ->
+            val key = FormatUtils.normalizeExerciseNameKey(name)
+            exercises.firstOrNull { it.nameKey == key }?.isArchived == true
+        } == true
+    }
+
     // Справочник может прийти после первого кадра; строка «+» из журнала = точный exerciseName в БД.
-    LaunchedEffect(preselectedExercise, exercises) {
+    LaunchedEffect(preselectedExercise, activeExercises) {
         if (preselectedExercise != null) {
             val sought = preselectedExercise.trim()
-            val match = exercises.find { it.name.trim() == sought }
-                ?: exercises.find { it.name.trim().equals(sought, ignoreCase = true) }
+            val match = activeExercises.find { it.name.trim() == sought }
+                ?: activeExercises.find { it.name.trim().equals(sought, ignoreCase = true) }
             if (match != null) selectedExercise = match
         }
     }
@@ -195,7 +203,7 @@ fun AddEntryDialog(
             ?: emptyList()
     }
 
-    val grouped = remember(exercises) { exercises.groupBy { it.muscleGroup } }
+    val grouped = remember(activeExercises) { activeExercises.groupBy { it.muscleGroup } }
 
     val scrollState = rememberScrollState()
     val coroutineScope = rememberCoroutineScope()
@@ -284,7 +292,7 @@ fun AddEntryDialog(
                             expanded = exerciseDropdownExpanded,
                             onDismissRequest = { exerciseDropdownExpanded = false }
                         ) {
-                            if (exercises.isEmpty()) {
+                            if (activeExercises.isEmpty()) {
                                 DropdownMenuItem(
                                     text = {
                                         Text(
@@ -354,6 +362,16 @@ fun AddEntryDialog(
                                 }
                             }
                         }
+                    }
+
+                    if (preselectedArchived && selectedExercise == null) {
+                        Spacer(modifier = Modifier.height(Spacing.xxs))
+                        Text(
+                            text = "Упражнение в архиве. Восстановите его в справочнике, " +
+                                "чтобы добавить запись.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
                     }
 
                     if (showBestWorkoutSection) {

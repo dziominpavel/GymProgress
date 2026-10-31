@@ -21,10 +21,13 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FitnessCenter
+import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -58,6 +61,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.gymprogress.data.Exercise
 import com.example.gymprogress.data.ExerciseType
+import com.example.gymprogress.data.FormatUtils
 import com.example.gymprogress.data.MuscleGroup
 import com.example.gymprogress.ui.components.EmptyState
 import com.example.gymprogress.ui.components.MuscleGroupIcon
@@ -71,16 +75,22 @@ import com.example.gymprogress.ui.theme.Volt
 fun ExercisesScreen(
     exercises: List<Exercise>,
     onAddExercise: (name: String, muscleGroup: String, exerciseType: String, isBodyweight: Boolean) -> Unit,
-    onDeleteExercise: (Exercise) -> Unit,
-    onUpdateExercise: (exercise: Exercise, oldName: String?) -> Unit,
+    onArchiveExercise: (Exercise) -> Unit,
+    onRestoreExercise: (Exercise) -> Unit,
+    onDeleteExercisePermanently: (Exercise) -> Unit,
+    onUpdateExercise: (exercise: Exercise) -> Unit,
     modifier: Modifier = Modifier
 ) {
     var showAddDialog by remember { mutableStateOf(false) }
+    var showArchived by remember { mutableStateOf(false) }
     var exerciseToDelete by remember { mutableStateOf<Exercise?>(null) }
+    var exerciseToDeletePermanently by remember { mutableStateOf<Exercise?>(null) }
     var exerciseToEdit by remember { mutableStateOf<Exercise?>(null) }
     val expandedGroups = remember { mutableStateMapOf<String, Boolean>() }
 
-    val grouped = exercises.groupBy { it.muscleGroup }
+    val archivedCount = exercises.count { it.isArchived }
+    val visibleExercises = exercises.filter { it.isArchived == showArchived }
+    val grouped = visibleExercises.groupBy { it.muscleGroup }
 
     Scaffold(
         modifier = modifier,
@@ -120,19 +130,40 @@ fun ExercisesScreen(
             )
             Spacer(modifier = Modifier.height(Spacing.xs))
             Text(
-                text = "${exercises.size} упражнений в ${grouped.size} группах",
+                text = if (showArchived) {
+                    "$archivedCount упражнений в архиве"
+                } else {
+                    "${visibleExercises.size} упражнений в ${grouped.size} группах"
+                },
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+            Spacer(modifier = Modifier.height(Spacing.sm))
+            Row(horizontalArrangement = Arrangement.spacedBy(Spacing.xs)) {
+                FilterChip(
+                    selected = !showArchived,
+                    onClick = { showArchived = false },
+                    label = { Text("Активные") }
+                )
+                FilterChip(
+                    selected = showArchived,
+                    onClick = { showArchived = true },
+                    label = { Text("Архив ($archivedCount)") }
+                )
+            }
             Spacer(modifier = Modifier.height(Spacing.md))
 
-            if (exercises.isEmpty()) {
+            if (visibleExercises.isEmpty()) {
                 EmptyState(
-                    icon = Icons.Default.FitnessCenter,
-                    title = "Упражнений пока нет",
-                    description = "Нажмите + чтобы создать первое упражнение",
-                    actionLabel = "Добавить упражнение",
-                    onAction = { showAddDialog = true },
+                    icon = if (showArchived) Icons.Default.Inventory2 else Icons.Default.FitnessCenter,
+                    title = if (showArchived) "Архив пуст" else "Активных упражнений нет",
+                    description = if (showArchived) {
+                        "Сюда попадут упражнения, которые вы уберёте из выбора"
+                    } else {
+                        "Нажмите + чтобы создать первое упражнение"
+                    },
+                    actionLabel = if (showArchived) null else "Добавить упражнение",
+                    onAction = if (showArchived) null else ({ showAddDialog = true }),
                     modifier = Modifier.fillMaxSize()
                 )
             } else {
@@ -159,7 +190,18 @@ fun ExercisesScreen(
                                 ExerciseItem(
                                     exercise = exercise,
                                     onClick = { exerciseToEdit = exercise },
-                                    onDelete = { exerciseToDelete = exercise }
+                                    onRestore = if (exercise.isArchived) {
+                                        { onRestoreExercise(exercise) }
+                                    } else {
+                                        null
+                                    },
+                                    onDelete = {
+                                        if (exercise.isArchived) {
+                                            exerciseToDeletePermanently = exercise
+                                        } else {
+                                            exerciseToDelete = exercise
+                                        }
+                                    }
                                 )
                             }
                         }
@@ -173,7 +215,7 @@ fun ExercisesScreen(
 
     if (showAddDialog) {
         AddExerciseDialog(
-            existingNames = exercises.map { it.name.lowercase() }.toSet(),
+            existingNames = exercises.map { it.nameKey }.toSet(),
             onDismiss = { showAddDialog = false },
             onConfirm = { name, group, type, isBodyweight ->
                 onAddExercise(name, group, type, isBodyweight)
@@ -185,11 +227,10 @@ fun ExercisesScreen(
     exerciseToEdit?.let { exercise ->
         EditExerciseDialog(
             exercise = exercise,
-            existingNames = exercises.map { it.name.lowercase() }.toSet(),
+            existingNames = exercises.filter { it.id != exercise.id }.map { it.nameKey }.toSet(),
             onDismiss = { exerciseToEdit = null },
             onConfirm = { updated ->
-                val oldName = if (updated.name != exercise.name) exercise.name else null
-                onUpdateExercise(updated, oldName)
+                onUpdateExercise(updated)
                 exerciseToEdit = null
             }
         )
@@ -198,18 +239,59 @@ fun ExercisesScreen(
     exerciseToDelete?.let { exercise ->
         AlertDialog(
             onDismissRequest = { exerciseToDelete = null },
-            title = { Text("Удалить упражнение?") },
-            text = { Text(exercise.name) },
+            title = { Text("Архивировать упражнение?") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+                    Text(
+                        "Упражнение скроется из выбора для новых записей, " +
+                            "но история и статистика сохранятся."
+                    )
+                    TextButton(
+                        onClick = {
+                            exerciseToDeletePermanently = exercise
+                            exerciseToDelete = null
+                        }
+                    ) {
+                        Text("Удалить навсегда", color = MaterialTheme.colorScheme.error)
+                    }
+                }
+            },
             confirmButton = {
                 TextButton(onClick = {
-                    onDeleteExercise(exercise)
+                    onArchiveExercise(exercise)
                     exerciseToDelete = null
                 }) {
-                    Text("Удалить", color = MaterialTheme.colorScheme.error)
+                    Text("В архив")
                 }
             },
             dismissButton = {
                 TextButton(onClick = { exerciseToDelete = null }) {
+                    Text("Отмена")
+                }
+            }
+        )
+    }
+
+    exerciseToDeletePermanently?.let { exercise ->
+        AlertDialog(
+            onDismissRequest = { exerciseToDeletePermanently = null },
+            title = { Text("Удалить навсегда?") },
+            text = {
+                Text(
+                    "Упражнение «${exercise.name}» исчезнет из справочника. " +
+                        "История тренировок сохранится, но упражнение больше нельзя будет выбрать."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    onDeleteExercisePermanently(exercise)
+                    exerciseToDeletePermanently = null
+                }) {
+                    Text("Удалить навсегда", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { exerciseToDeletePermanently = null }) {
                     Text("Отмена")
                 }
             }
@@ -293,7 +375,12 @@ private fun MuscleGroupHeader(
 }
 
 @Composable
-private fun ExerciseItem(exercise: Exercise, onClick: () -> Unit, onDelete: () -> Unit) {
+private fun ExerciseItem(
+    exercise: Exercise,
+    onClick: () -> Unit,
+    onRestore: (() -> Unit)?,
+    onDelete: () -> Unit
+) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -327,18 +414,35 @@ private fun ExerciseItem(exercise: Exercise, onClick: () -> Unit, onDelete: () -
                 val typeName = ExerciseType.entries
                     .find { it.name == exercise.exerciseType }?.displayName ?: "Базовое"
                 Text(
-                    text = typeName,
+                    text = if (exercise.isArchived) "$typeName · В архиве" else typeName,
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+            }
+            if (onRestore != null) {
+                IconButton(
+                    onClick = onRestore,
+                    modifier = Modifier.size(48.dp)
+                ) {
+                    Icon(
+                        Icons.Default.Restore,
+                        contentDescription = "Восстановить",
+                        tint = Volt,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
             }
             IconButton(
                 onClick = onDelete,
                 modifier = Modifier.size(48.dp)
             ) {
                 Icon(
-                    Icons.Default.Delete,
-                    contentDescription = "Удалить",
+                    imageVector = if (exercise.isArchived) Icons.Default.Delete else Icons.Default.Archive,
+                    contentDescription = if (exercise.isArchived) {
+                        "Удалить навсегда"
+                    } else {
+                        "Архивировать или удалить"
+                    },
                     tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
                     modifier = Modifier.size(18.dp)
                 )
@@ -473,7 +577,8 @@ private fun AddExerciseDialog(
         confirmButton = {
             TextButton(onClick = {
                 nameError = name.isBlank()
-                nameDuplicateError = !nameError && name.trim().lowercase() in existingNames
+                nameDuplicateError = !nameError &&
+                    FormatUtils.normalizeExerciseNameKey(name) in existingNames
                 groupError = selectedGroup == null
                 if (!nameError && !nameDuplicateError && !groupError) {
                     onConfirm(name.trim(), selectedGroup!!.name, selectedType.name, isBodyweight)
@@ -501,8 +606,7 @@ private fun EditExerciseDialog(
     var isBodyweight by remember { mutableStateOf(exercise.isBodyweight) }
     var name by remember { mutableStateOf(exercise.name) }
     val nameTrimmed = name.trim()
-    val isDuplicate = nameTrimmed.lowercase() != exercise.name.lowercase() &&
-            nameTrimmed.lowercase() in existingNames
+    val isDuplicate = FormatUtils.normalizeExerciseNameKey(nameTrimmed) in existingNames
     val isNameEmpty = nameTrimmed.isBlank()
 
     AlertDialog(

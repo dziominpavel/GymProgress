@@ -22,6 +22,9 @@ interface ExerciseDao {
     @Query("SELECT * FROM exercises ORDER BY muscleGroup ASC, name ASC")
     fun getAllExercises(): Flow<List<Exercise>>
 
+    @Query("SELECT * FROM exercises WHERE isArchived = 0 ORDER BY muscleGroup ASC, name ASC")
+    fun getActiveExercises(): Flow<List<Exercise>>
+
     @Query("SELECT * FROM exercises WHERE muscleGroup = :group ORDER BY name ASC")
     fun getExercisesByGroup(group: String): Flow<List<Exercise>>
 
@@ -34,15 +37,17 @@ interface ExerciseDao {
     @Query("SELECT COUNT(*) FROM exercises WHERE name = :name")
     suspend fun countByName(name: String): Int
 
+    @Query("SELECT * FROM exercises WHERE nameKey = :nameKey LIMIT 1")
+    suspend fun getByNameKey(nameKey: String): Exercise?
+
+    @Query("SELECT * FROM exercises WHERE id = :id LIMIT 1")
+    suspend fun getById(id: Long): Exercise?
+
     /**
-     * Поиск дубликатов с case-insensitive нормализацией пробелов и регистра
-     * (соответствует [com.example.gymprogress.data.FormatUtils.normalizeExerciseNameKey]).
+     * Поиск дубликатов по нормализованному имени, которое вычисляется в Kotlin
+     * ([com.example.gymprogress.data.FormatUtils.normalizeExerciseNameKey]).
      * При обновлении упражнения исключающий [excludeId] позволяет не считать само себя.
      */
-    @Query(
-        "SELECT COUNT(*) FROM exercises " +
-            "WHERE LOWER(TRIM(REPLACE(name, char(160), ' '))) = :normalizedName " +
-            "AND id != :excludeId"
-    )
-    suspend fun countByNormalizedName(normalizedName: String, excludeId: Long = 0): Int
+    @Query("SELECT COUNT(*) FROM exercises WHERE nameKey = :nameKey AND id != :excludeId")
+    suspend fun countByNameKey(nameKey: String, excludeId: Long = 0): Int
 }

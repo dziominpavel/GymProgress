@@ -4,6 +4,7 @@ import android.app.Application
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.room.withTransaction
 import com.example.gymprogress.data.AiService
 import com.example.gymprogress.data.AppDatabase
 import com.example.gymprogress.data.ChartMetric
@@ -258,16 +259,26 @@ class WorkoutViewModel(application: Application) : AndroidViewModel(application)
     private val _selectedExercise = MutableStateFlow<String?>(null)
     val selectedExercise: StateFlow<String?> = _selectedExercise.asStateFlow()
 
-    val entriesForSelectedExercise: StateFlow<List<WorkoutEntry>> = _selectedExercise
-        .flatMapLatest { name ->
-            if (name != null) {
-                allEntries.map { allEntries ->
-                    FormatUtils.workoutEntriesMatchingCatalogName(allEntries, name)
-                        .sortedWith(compareBy({ it.date }, { it.id }))
-                }
-            } else flowOf(emptyList())
-        }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val entriesForSelectedExercise: StateFlow<List<WorkoutEntry>> =
+        combine(_selectedExercise, allEntries, allExercises) { name, entries, exercises ->
+            if (name == null) {
+                emptyList()
+            } else {
+                val nameKey = FormatUtils.normalizeExerciseNameKey(name)
+                val selected = exercises.firstOrNull { it.nameKey == nameKey }
+                entries.filter { entry ->
+                    when {
+                        selected != null && entry.exerciseId != null ->
+                            entry.exerciseId == selected.id
+                        selected != null ->
+                            entry.exerciseId == null &&
+                                FormatUtils.normalizeExerciseNameKey(entry.exerciseName) == nameKey
+                        else ->
+                            FormatUtils.normalizeExerciseNameKey(entry.exerciseName) == nameKey
+                    }
+                }.sortedWith(compareBy({ it.date }, { it.id }))
+            }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val selectedExerciseType: StateFlow<ExerciseType> = _selectedExercise
         .flatMapLatest { name ->
@@ -293,12 +304,19 @@ class WorkoutViewModel(application: Application) : AndroidViewModel(application)
 
     fun addEntry(date: String, exerciseName: String, weight: Double, reps: String) {
         safeDb("Не удалось добавить запись") {
+            val cleanName = exerciseName.trim()
+            val exercise = exerciseDao.getByNameKey(FormatUtils.normalizeExerciseNameKey(cleanName))
+            if (exercise?.isArchived == true) {
+                _errorMessage.value = "Упражнение в архиве. Восстановите его, чтобы добавить запись."
+                return@safeDb
+            }
             workoutDao.insert(
                 WorkoutEntry(
                     date = date,
-                    exerciseName = exerciseName.trim(),
+                    exerciseName = cleanName,
                     weight = weight,
-                    reps = reps.trim()
+                    reps = reps.trim(),
+                    exerciseId = exercise?.id
                 )
             )
         }
@@ -332,9 +350,14 @@ class WorkoutViewModel(application: Application) : AndroidViewModel(application)
                 _errorMessage.value = "Название упражнения не может быть пустым"
                 return@safeDb
             }
-            val normalized = FormatUtils.normalizeExerciseNameKey(cleanName)
-            if (exerciseDao.countByNormalizedName(normalized) > 0) {
-                _errorMessage.value = "Упражнение с таким именем уже есть"
+            val nameKey = FormatUtils.normalizeExerciseNameKey(cleanName)
+            if (exerciseDao.countByNameKey(nameKey) > 0) {
+                val existing = exerciseDao.getByNameKey(nameKey)
+                _errorMessage.value = if (existing?.isArchived == true) {
+                    "Упражнение с таким именем уже есть в архиве. Восстановите его."
+                } else {
+                    "Упражнение с таким именем уже есть"
+                }
                 return@safeDb
             }
             exerciseDao.insert(
@@ -342,33 +365,54 @@ class WorkoutViewModel(application: Application) : AndroidViewModel(application)
                     name = cleanName,
                     muscleGroup = muscleGroup,
                     exerciseType = exerciseType,
-                    isBodyweight = isBodyweight
+                    isBodyweight = isBodyweight,
+                    nameKey = nameKey
                 )
             )
         }
     }
 
-    fun updateExercise(exercise: Exercise, oldName: String? = null) {
+    fun updateExercise(exercise: Exercise) {
         safeDb("Не удалось обновить упражнение") {
             val cleanName = exercise.name.trim()
             if (cleanName.isEmpty()) {
                 _errorMessage.value = "Название упражнения не может быть пустым"
                 return@safeDb
             }
-            val normalized = FormatUtils.normalizeExerciseNameKey(cleanName)
-            if (exerciseDao.countByNormalizedName(normalized, excludeId = exercise.id) > 0) {
-                _errorMessage.value = "Упражнение с таким именем уже есть"
+            val nameKey = FormatUtils.normalizeExerciseNameKey(cleanName)
+            val duplicate = exerciseDao.getByNameKey(nameKey)
+            if (duplicate != null && duplicate.id != exercise.id) {
+                _errorMessage.value = if (duplicate.isArchived) {
+                    "Упражнение с таким именем уже есть в архиве. Восстановите его."
+                } else {
+                    "Упражнение с таким именем уже есть"
+                }
                 return@safeDb
             }
-            val finalExercise = if (cleanName != exercise.name) exercise.copy(name = cleanName) else exercise
-            exerciseDao.update(finalExercise)
-            if (oldName != null && oldName != finalExercise.name) {
-                workoutDao.renameExercise(oldName, finalExercise.name)
+            val current = exerciseDao.getById(exercise.id)
+            val finalExercise = exercise.copy(name = cleanName, nameKey = nameKey)
+            db.withTransaction {
+                exerciseDao.update(finalExercise)
+                if (current != null && current.name != finalExercise.name) {
+                    workoutDao.updateExerciseNameForEntries(finalExercise.id, finalExercise.name)
+                }
             }
         }
     }
 
-    fun deleteExercise(exercise: Exercise) {
+    fun archiveExercise(exercise: Exercise) {
+        safeDb("Не удалось архивировать упражнение") {
+            exerciseDao.update(exercise.copy(isArchived = true))
+        }
+    }
+
+    fun restoreExercise(exercise: Exercise) {
+        safeDb("Не удалось восстановить упражнение") {
+            exerciseDao.update(exercise.copy(isArchived = false))
+        }
+    }
+
+    fun deleteExercisePermanently(exercise: Exercise) {
         safeDb("Не удалось удалить упражнение") {
             exerciseDao.delete(exercise)
         }
@@ -458,6 +502,10 @@ class WorkoutViewModel(application: Application) : AndroidViewModel(application)
                 _exerciseRecommendationForJournal.value = null
                 return@launch
             }
+            if (exercise.isArchived) {
+                _exerciseRecommendationForJournal.value = null
+                return@launch
+            }
             _exerciseRecommendationForJournal.value = trainerEngine.getRecommendationForExercise(
                 exercise = exercise,
                 history = allEntries.value,
@@ -508,49 +556,67 @@ class WorkoutViewModel(application: Application) : AndroidViewModel(application)
         val today = FormatUtils.toStorageDate(LocalDate.now())
         val workingSets = completedSets.filter { it.setType == SetType.WORKING }
         val grouped = workingSets.groupBy { it.exerciseName }
-        val toInsert = mutableListOf<WorkoutEntry>()
-        grouped.forEach { (name, sets) ->
-            val distinctWeights = sets.map { it.weight }.distinct()
-            if (distinctWeights.size == 1) {
-                val reps = sets.joinToString(",") { it.reps.toString() }
-                toInsert.add(
-                    WorkoutEntry(
-                        date = today,
-                        exerciseName = name.trim(),
-                        weight = distinctWeights.first(),
-                        reps = reps.trim()
-                    )
-                )
-            } else {
-                val mainWeight = sets.groupBy { it.weight }
-                    .maxByOrNull { it.value.size }?.key ?: sets.first().weight
-                val mainSets = sets.filter { it.weight == mainWeight }
-                val reps = mainSets.joinToString(",") { it.reps.toString() }
-                toInsert.add(
-                    WorkoutEntry(
-                        date = today,
-                        exerciseName = name.trim(),
-                        weight = mainWeight,
-                        reps = reps.trim()
-                    )
-                )
-                val otherGroups = sets.filter { it.weight != mainWeight }.groupBy { it.weight }
-                otherGroups.forEach { (w, wSets) ->
-                    val otherReps = wSets.joinToString(",") { it.reps.toString() }
+        if (grouped.isEmpty()) return
+
+        safeDb("Не удалось сохранить тренировку") {
+            val exerciseByKey = grouped.keys.associate { name ->
+                val key = FormatUtils.normalizeExerciseNameKey(name)
+                key to exerciseDao.getByNameKey(key)
+            }
+            val archived = exerciseByKey.values.filterNotNull().firstOrNull { it.isArchived }
+            if (archived != null) {
+                _errorMessage.value =
+                    "Упражнение «${archived.name}» в архиве. Восстановите его, чтобы сохранить тренировку."
+                return@safeDb
+            }
+
+            val toInsert = mutableListOf<WorkoutEntry>()
+            grouped.forEach { (name, sets) ->
+                val exerciseId = exerciseByKey[FormatUtils.normalizeExerciseNameKey(name)]?.id
+                val distinctWeights = sets.map { it.weight }.distinct()
+                if (distinctWeights.size == 1) {
+                    val reps = sets.joinToString(",") { it.reps.toString() }
                     toInsert.add(
                         WorkoutEntry(
                             date = today,
                             exerciseName = name.trim(),
-                            weight = w,
-                            reps = otherReps.trim()
+                            weight = distinctWeights.first(),
+                            reps = reps.trim(),
+                            exerciseId = exerciseId
                         )
                     )
+                } else {
+                    val mainWeight = sets.groupBy { it.weight }
+                        .maxByOrNull { it.value.size }?.key ?: sets.first().weight
+                    val mainSets = sets.filter { it.weight == mainWeight }
+                    val reps = mainSets.joinToString(",") { it.reps.toString() }
+                    toInsert.add(
+                        WorkoutEntry(
+                            date = today,
+                            exerciseName = name.trim(),
+                            weight = mainWeight,
+                            reps = reps.trim(),
+                            exerciseId = exerciseId
+                        )
+                    )
+                    val otherGroups = sets.filter { it.weight != mainWeight }.groupBy { it.weight }
+                    otherGroups.forEach { (w, wSets) ->
+                        val otherReps = wSets.joinToString(",") { it.reps.toString() }
+                        toInsert.add(
+                            WorkoutEntry(
+                                date = today,
+                                exerciseName = name.trim(),
+                                weight = w,
+                                reps = otherReps.trim(),
+                                exerciseId = exerciseId
+                            )
+                        )
+                    }
                 }
             }
-        }
-        if (toInsert.isEmpty()) return
-        safeDb("Не удалось сохранить тренировку") {
-            workoutDao.insertEntries(toInsert)
+            if (toInsert.isNotEmpty()) {
+                workoutDao.insertEntries(toInsert)
+            }
         }
     }
 

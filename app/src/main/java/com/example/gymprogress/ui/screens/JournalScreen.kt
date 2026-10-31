@@ -345,6 +345,8 @@ fun JournalScreen(
                             WorkoutEntryCard(
                                 entry = entry,
                                 isPersonalRecord = entry.id in personalRecordEntryIds,
+                                isArchived = FormatUtils.findExerciseForEntry(entry, exercises)
+                                    ?.isArchived == true,
                                 onLongClick = { selectedEntry = entry }
                             )
                         }
@@ -365,7 +367,11 @@ fun JournalScreen(
             ) {
                 Column(modifier = Modifier.padding(24.dp)) {
                     Text(
-                        entry.exerciseName,
+                        if (FormatUtils.findExerciseForEntry(entry, exercises)?.isArchived == true) {
+                            "${entry.exerciseName} · архив"
+                        } else {
+                            entry.exerciseName
+                        },
                         fontWeight = FontWeight.Bold,
                         style = MaterialTheme.typography.headlineSmall
                     )
@@ -623,7 +629,11 @@ private fun PreviousSessionExerciseRow(
             Column(modifier = Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        text = entry.exerciseName,
+                        text = if (exercise?.isArchived == true) {
+                            "${entry.exerciseName} · архив"
+                        } else {
+                            entry.exerciseName
+                        },
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurface,
@@ -671,6 +681,7 @@ private fun PreviousSessionExerciseRow(
 internal fun WorkoutEntryCard(
     entry: WorkoutEntry,
     isPersonalRecord: Boolean = false,
+    isArchived: Boolean = false,
     onLongClick: () -> Unit
 ) {
     val accentColor = Volt
@@ -740,7 +751,7 @@ internal fun WorkoutEntryCard(
                 Column(modifier = Modifier.weight(1f)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            text = entry.exerciseName,
+                            text = if (isArchived) "${entry.exerciseName} · архив" else entry.exerciseName,
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface,

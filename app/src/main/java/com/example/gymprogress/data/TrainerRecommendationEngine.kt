@@ -22,6 +22,7 @@ class TrainerRecommendationEngine {
         scoringEngine: ScoringEngine = SimplifiedScoreCalculator,
         scoringSystem: ScoringSystem = ScoringSystem.SIMPLIFIED
     ): WorkoutRecommendation {
+        val activeExercises = exercises.filter { !it.isArchived }
         val preferredDayIndex = determineNextDayIndex(settings, history, exercises)
         val totalDays = getTotalDays(settings)
         val isDeload = shouldDeload(settings, history)
@@ -35,7 +36,7 @@ class TrainerRecommendationEngine {
             val recs = buildExerciseList(
                 muscleGroups = muscleGroups,
                 priorityGroups = settings.priorityGroups,
-                exercises = exercises,
+                exercises = activeExercises,
                 history = history,
                 trainingGoal = trainingGoal,
                 progressionType = settings.progressionType,
@@ -74,6 +75,7 @@ class TrainerRecommendationEngine {
     ): List<Exercise> {
         return allExercises.filter {
             it.id != exercise.id &&
+            !it.isArchived &&
             it.muscleGroup == exercise.muscleGroup &&
             it.exerciseType == exercise.exerciseType
         }

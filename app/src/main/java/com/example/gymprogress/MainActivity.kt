@@ -156,10 +156,17 @@ fun GymProgressApp(viewModel: WorkoutViewModel = viewModel()) {
     // PR-карта: id записи с максимальным оценочным 1RM в рамках упражнения.
     // Используется в Журнале и Истории для отрисовки бейджа.
     val personalRecordEntryIds = remember(entries, allExercises, bodyWeightKg) {
-        val byExerciseKey = entries.groupBy { FormatUtils.normalizeExerciseNameKey(it.exerciseName) }
+        val byExerciseKey = entries.groupBy { entry ->
+            entry.exerciseId?.let { "id:$it" }
+                ?: "name:${FormatUtils.normalizeExerciseNameKey(entry.exerciseName)}"
+        }
         byExerciseKey.mapNotNull { (_, exerciseEntries) ->
             val first = exerciseEntries.firstOrNull() ?: return@mapNotNull null
-            val ex = allExercises.find { it.name == first.exerciseName }
+            val ex = first.exerciseId?.let { id -> allExercises.find { it.id == id } }
+                ?: allExercises.find {
+                    FormatUtils.normalizeExerciseNameKey(it.name) ==
+                        FormatUtils.normalizeExerciseNameKey(first.exerciseName)
+                }
             val isBw = ex?.isBodyweight == true
             val best = exerciseEntries.maxByOrNull {
                 SimplifiedScoreCalculator.calcE1RMForEntry(it, bodyWeightKg, isBw)
@@ -265,8 +272,10 @@ fun GymProgressApp(viewModel: WorkoutViewModel = viewModel()) {
                     onAddExercise = { name, group, type, isBodyweight ->
                         viewModel.addExercise(name, group, type, isBodyweight)
                     },
-                    onDeleteExercise = { viewModel.deleteExercise(it) },
-                    onUpdateExercise = { exercise, oldName -> viewModel.updateExercise(exercise, oldName) },
+                    onArchiveExercise = { viewModel.archiveExercise(it) },
+                    onRestoreExercise = { viewModel.restoreExercise(it) },
+                    onDeleteExercisePermanently = { viewModel.deleteExercisePermanently(it) },
+                    onUpdateExercise = { exercise -> viewModel.updateExercise(exercise) },
                     modifier = Modifier.fillMaxSize()
                 )
                 AppDestinations.STATS -> StatsScreen(

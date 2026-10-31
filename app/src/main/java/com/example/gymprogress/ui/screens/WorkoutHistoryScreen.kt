@@ -290,6 +290,8 @@ fun WorkoutHistoryScreen(
                             WorkoutEntryCard(
                                 entry = entry,
                                 isPersonalRecord = entry.id in personalRecordEntryIds,
+                                isArchived = FormatUtils.findExerciseForEntry(entry, exercises)
+                                    ?.isArchived == true,
                                 onLongClick = { selectedEntry = entry }
                             )
                         }
@@ -309,7 +311,11 @@ fun WorkoutHistoryScreen(
             ) {
                 Column(modifier = Modifier.padding(24.dp)) {
                     Text(
-                        entry.exerciseName,
+                        if (FormatUtils.findExerciseForEntry(entry, exercises)?.isArchived == true) {
+                            "${entry.exerciseName} · архив"
+                        } else {
+                            entry.exerciseName
+                        },
                         fontWeight = FontWeight.Bold,
                         style = MaterialTheme.typography.headlineSmall
                     )

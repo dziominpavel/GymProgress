@@ -78,8 +78,13 @@ fun EditEntryDialog(
     var showDatePicker by remember { mutableStateOf(false) }
     var storageDate by remember(entry.id) { mutableStateOf(FormatUtils.toStorageDate(initialDate)) }
     var displayDate by remember(entry.id) { mutableStateOf(FormatUtils.formatDate(FormatUtils.toStorageDate(initialDate))) }
-    val isBodyweightExercise = remember(entry.exerciseName, exercises) {
-        exercises.firstOrNull { it.name == entry.exerciseName }?.isBodyweight == true
+    val isBodyweightExercise = remember(entry.exerciseId, entry.exerciseName, exercises) {
+        val linked = entry.exerciseId?.let { id -> exercises.firstOrNull { it.id == id } }
+        val fallback = exercises.firstOrNull {
+            FormatUtils.normalizeExerciseNameKey(it.name) ==
+                FormatUtils.normalizeExerciseNameKey(entry.exerciseName)
+        }
+        (linked ?: fallback)?.isBodyweight == true
     }
     val initialWeightText = remember(entry.weight, bodyWeightKg, isBodyweightExercise) {
         if (isBodyweightExercise && bodyWeightKg != null) {
