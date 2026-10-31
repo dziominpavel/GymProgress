@@ -630,7 +630,7 @@ internal fun WorkoutDaySection(
     }
     Spacer(modifier = Modifier.height(16.dp))
     if (selectedMuscleGroup != null) {
-        val report = remember(selectedMuscleGroup, allEntries, trainingGoal, scoringEngine) {
+        val report = remember(selectedMuscleGroup, allEntries, trainingGoal, scoringEngine, bodyWeightKg) {
             scoringEngine.compareDays(
                 muscleGroupName = selectedMuscleGroup.name,
                 allExercises = exercises,

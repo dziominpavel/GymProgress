@@ -44,6 +44,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -147,11 +148,11 @@ fun JournalScreen(
 
     val hasAnyContent = workoutRecommendation != null || previousExercises.isNotEmpty() || entries.isNotEmpty() || previousSessionDayLabel != null
 
-    val visibleTodayEntries = remember(entries, pendingDelete) {
-        entries.filter { it.id !in pendingDelete }
+    val visibleTodayEntries by remember(entries) {
+        derivedStateOf { entries.filter { it.id !in pendingDelete } }
     }
-    val visiblePreviousExercises = remember(previousExercises, pendingDelete) {
-        previousExercises.filter { it.id !in pendingDelete }
+    val visiblePreviousExercises by remember(previousExercises) {
+        derivedStateOf { previousExercises.filter { it.id !in pendingDelete } }
     }
     val sortedTodayEntries = remember(visibleTodayEntries) {
         visibleTodayEntries.sortedWith(

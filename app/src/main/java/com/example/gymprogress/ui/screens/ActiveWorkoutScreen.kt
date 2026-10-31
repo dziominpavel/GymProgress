@@ -3,6 +3,7 @@ package com.example.gymprogress.ui.screens
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.animateFloatAsState
@@ -45,11 +46,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -62,13 +62,13 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.example.gymprogress.data.ActiveWorkoutSession
 import com.example.gymprogress.data.ActiveWorkoutSnapshot
+import com.example.gymprogress.data.ActiveWorkoutUiState
 import com.example.gymprogress.data.CompletedSet
 import com.example.gymprogress.data.ExerciseRecommendation
 import com.example.gymprogress.data.FormatUtils
 import com.example.gymprogress.data.MuscleGroup
 import com.example.gymprogress.data.SetType
 import com.example.gymprogress.data.WorkoutEntry
-import com.example.gymprogress.data.WorkoutRecommendation
 import com.example.gymprogress.service.ActiveWorkoutService
 import com.example.gymprogress.ui.components.rememberHaptics
 import com.example.gymprogress.ui.components.rememberRestTimerFeedback
@@ -79,7 +79,8 @@ import kotlinx.coroutines.delay
 
 @Composable
 fun ActiveWorkoutScreen(
-    recommendation: WorkoutRecommendation,
+    state: ActiveWorkoutUiState,
+    onStateChange: (ActiveWorkoutUiState) -> Unit,
     onFinish: (List<CompletedSet>) -> Unit,
     onCancel: () -> Unit,
     timerSoundEnabled: Boolean = true,
@@ -89,53 +90,61 @@ fun ActiveWorkoutScreen(
 ) {
     val haptics = rememberHaptics()
     val timerFeedback = rememberRestTimerFeedback()
-    var showCancelDialog by remember { mutableStateOf(false) }
-    var currentExerciseIndex by remember { mutableIntStateOf(0) }
-    var currentSetIndex by remember { mutableIntStateOf(0) }
-    var isResting by remember { mutableStateOf(false) }
-    var restTimeLeft by remember { mutableIntStateOf(0) }
-    var workoutStartTime by remember { mutableLongStateOf(System.currentTimeMillis()) }
-    var elapsedMinutes by remember { mutableLongStateOf(0L) }
+    var showCancelDialog by rememberSaveable { mutableStateOf(false) }
 
-    LaunchedEffect(Unit) {
+    val recommendation = state.recommendation
+    val exercises = recommendation.exercises
+    val currentExerciseIndex = state.currentExerciseIndex
+    val currentSetIndex = state.currentSetIndex
+    val isResting = state.isResting
+    val restTimeLeft = state.restTimeLeft
+    val workoutStartTime = state.workoutStartTime
+    val completedSets = state.completedSets
+    val isWorkoutFinished = currentExerciseIndex >= exercises.size
+
+    // Системный back не должен молча выбрасывать тренировку — показываем подтверждение.
+    BackHandler {
+        showCancelDialog = true
+    }
+
+    var elapsedMinutes by remember(workoutStartTime) {
+        mutableLongStateOf(((System.currentTimeMillis() - workoutStartTime) / 1000 / 60))
+    }
+
+    LaunchedEffect(workoutStartTime) {
         while (true) {
             elapsedMinutes = (System.currentTimeMillis() - workoutStartTime) / 1000 / 60
             delay(30_000L)
         }
     }
 
-    val completedSets = remember { mutableStateListOf<CompletedSet>() }
-
-    val exercises = recommendation.exercises
-    val isWorkoutFinished = currentExerciseIndex >= exercises.size
-
     val currentExercise = if (!isWorkoutFinished) exercises[currentExerciseIndex] else null
     val currentSet = if (currentExercise != null && currentSetIndex < currentExercise.sets.size)
         currentExercise.sets[currentSetIndex] else null
 
-    var actualWeight by remember(currentExerciseIndex, currentSetIndex) {
+    var actualWeight by rememberSaveable(currentExerciseIndex, currentSetIndex) {
         mutableStateOf(currentSet?.weight?.toString() ?: "")
     }
-    var actualReps by remember(currentExerciseIndex, currentSetIndex) {
+    var actualReps by rememberSaveable(currentExerciseIndex, currentSetIndex) {
         mutableStateOf(currentSet?.targetReps?.first?.toString() ?: "")
     }
 
     LaunchedEffect(isResting, restTimeLeft) {
         if (isResting && restTimeLeft > 0) {
             delay(1000L)
-            restTimeLeft -= 1
+            val next = restTimeLeft - 1
             // Звук/вибрация на финале таймера: 3·2·1 — короткие бипы, 0 — длинный + вибро.
             when {
-                restTimeLeft == 0 -> {
+                next == 0 -> {
                     if (timerSoundEnabled) timerFeedback.longBeep()
                     if (timerVibrationEnabled) timerFeedback.vibrate()
+                    onStateChange(state.copy(isResting = false, restTimeLeft = 0))
                 }
-                restTimeLeft in 1..3 -> {
+                next in 1..3 -> {
                     if (timerSoundEnabled) timerFeedback.shortBeep()
+                    onStateChange(state.copy(restTimeLeft = next))
                 }
-            }
-            if (restTimeLeft <= 0) {
-                isResting = false
+                else -> onStateChange(state.copy(restTimeLeft = next))
             }
         }
     }
@@ -147,11 +156,34 @@ fun ActiveWorkoutScreen(
 
     val context = LocalContext.current
 
-    val permissionLauncher = rememberLauncherForActivityResult(
+    val activityRecognitionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { isGranted ->
         if (isGranted) {
             ActiveWorkoutService.start(context)
+        }
+    }
+
+    fun startWorkoutService() {
+        // Android 14+ требует одно из health-разрешений для FGS типа health.
+        // ACTIVITY_RECOGNITION уже объявлен в манифесте, но должен быть выдан runtime.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE &&
+            ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.ACTIVITY_RECOGNITION
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            activityRecognitionLauncher.launch(Manifest.permission.ACTIVITY_RECOGNITION)
+        } else {
+            ActiveWorkoutService.start(context)
+        }
+    }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            startWorkoutService()
         }
     }
 
@@ -162,12 +194,12 @@ fun ActiveWorkoutScreen(
                     context,
                     Manifest.permission.POST_NOTIFICATIONS
                 ) == PackageManager.PERMISSION_GRANTED -> {
-                    ActiveWorkoutService.start(context)
+                    startWorkoutService()
                 }
                 else -> permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
             }
         } else {
-            ActiveWorkoutService.start(context)
+            startWorkoutService()
         }
     }
 
@@ -282,7 +314,7 @@ fun ActiveWorkoutScreen(
                 WorkoutSummary(
                     completedSets = completedSets,
                     startTime = workoutStartTime,
-                    onFinish = { onFinish(completedSets.toList()) }
+                    onFinish = { onFinish(completedSets) }
                 )
             } else if (isResting) {
                 // Rest timer
@@ -293,8 +325,7 @@ fun ActiveWorkoutScreen(
                     nextSetIndex = currentSetIndex + 1,
                     totalSetsForExercise = currentExercise?.sets?.size ?: 0,
                     onSkip = {
-                        isResting = false
-                        restTimeLeft = 0
+                        onStateChange(state.copy(isResting = false, restTimeLeft = 0))
                     }
                 )
             } else if (currentExercise != null && currentSet != null) {
@@ -333,8 +364,8 @@ fun ActiveWorkoutScreen(
                         val r = actualReps.toIntOrNull() ?: 0
 
                         haptics.confirm()
-                        completedSets.add(
-                            CompletedSet(
+                        val updated = state.copy(
+                            completedSets = state.completedSets + CompletedSet(
                                 exerciseName = currentExercise.exercise.name,
                                 weight = w,
                                 reps = r,
@@ -342,20 +373,35 @@ fun ActiveWorkoutScreen(
                             )
                         )
 
-                        val nextSetIdx = currentSetIndex + 1
+                        val nextSetIdx = state.currentSetIndex + 1
                         if (nextSetIdx < currentExercise.sets.size) {
-                            restTimeLeft = currentSet.restSeconds
-                            isResting = true
-                            currentSetIndex = nextSetIdx
+                            onStateChange(
+                                updated.copy(
+                                    currentSetIndex = nextSetIdx,
+                                    restTimeLeft = currentSet.restSeconds,
+                                    isResting = true
+                                )
+                            )
                         } else {
-                            val nextExIdx = currentExerciseIndex + 1
+                            val nextExIdx = state.currentExerciseIndex + 1
                             if (nextExIdx < exercises.size) {
-                                restTimeLeft = currentSet.restSeconds
-                                isResting = true
-                                currentExerciseIndex = nextExIdx
-                                currentSetIndex = 0
+                                onStateChange(
+                                    updated.copy(
+                                        currentExerciseIndex = nextExIdx,
+                                        currentSetIndex = 0,
+                                        restTimeLeft = currentSet.restSeconds,
+                                        isResting = true
+                                    )
+                                )
                             } else {
-                                currentExerciseIndex = nextExIdx
+                                onStateChange(
+                                    updated.copy(
+                                        currentExerciseIndex = nextExIdx,
+                                        currentSetIndex = 0,
+                                        isResting = false,
+                                        restTimeLeft = 0
+                                    )
+                                )
                             }
                         }
                     },
@@ -379,7 +425,7 @@ fun ActiveWorkoutScreen(
                 if (completedSets.isNotEmpty()) {
                     TextButton(onClick = {
                         showCancelDialog = false
-                        onFinish(completedSets.toList())
+                        onFinish(completedSets)
                     }) {
                         Text("Сохранить и выйти", fontWeight = FontWeight.Bold)
                     }

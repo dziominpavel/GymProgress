@@ -467,7 +467,7 @@ fun StatsScreen(
                 if (storageDate == null) emptyList()
                 else allEntries.filter { it.date == storageDate }.sortedBy { it.id }
             }
-            val dateReport = remember(storageDate, allEntries, exercises, trainingGoal, scoringEngine) {
+            val dateReport = remember(storageDate, allEntries, exercises, trainingGoal, scoringEngine, bodyWeightKg) {
                 if (storageDate != null)
                     scoringEngine.compareSessionByDate(
                         selectedDateStorage = storageDate,

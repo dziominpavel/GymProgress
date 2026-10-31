@@ -1,21 +1,25 @@
 package com.example.gymprogress.service
 
+import android.Manifest
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.ServiceCompat
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleService
 import androidx.lifecycle.lifecycleScope
 import com.example.gymprogress.MainActivity
 import com.example.gymprogress.R
 import com.example.gymprogress.data.ActiveWorkoutSession
 import com.example.gymprogress.data.ActiveWorkoutSnapshot
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
@@ -36,6 +40,8 @@ import kotlinx.coroutines.launch
  */
 class ActiveWorkoutService : LifecycleService() {
 
+    private var snapshotJob: Job? = null
+
     override fun onCreate() {
         super.onCreate()
         ensureNotificationChannel(this)
@@ -46,15 +52,24 @@ class ActiveWorkoutService : LifecycleService() {
 
         // Стартовое уведомление — без данных (state может ещё не успеть обновиться).
         val initial = ActiveWorkoutSession.state.value
-        ServiceCompat.startForeground(
-            this,
-            NOTIFICATION_ID,
-            buildNotification(this, initial),
-            foregroundServiceType()
-        )
+        try {
+            ServiceCompat.startForeground(
+                this,
+                NOTIFICATION_ID,
+                buildNotification(this, initial),
+                foregroundServiceType()
+            )
+        } catch (_: SecurityException) {
+            // Например, на Android 14+ не выдано ACTIVITY_RECOGNITION для FGS типа health.
+            // Тренировка может продолжаться без foreground-уведомления.
+            stopSelf()
+            return START_NOT_STICKY
+        }
 
         // Подписка на изменения снимка. Если state = null — останавливаемся.
-        lifecycleScope.launch {
+        // Повторный start (например, после поворота) не должен плодить коллекторы.
+        snapshotJob?.cancel()
+        snapshotJob = lifecycleScope.launch {
             ActiveWorkoutSession.state.collectLatest { snapshot ->
                 if (snapshot == null) {
                     ServiceCompat.stopForeground(this@ActiveWorkoutService, ServiceCompat.STOP_FOREGROUND_REMOVE)
@@ -96,6 +111,17 @@ class ActiveWorkoutService : LifecycleService() {
          * `IllegalStateException` для foreground-сервиса в фоне.
          */
         fun start(context: Context) {
+            // На Android 14+ FGS типа health требует health-разрешение или ACTIVITY_RECOGNITION.
+            // Без него startForeground() бросит SecurityException и уронит процесс — лучше
+            // продолжить тренировку без уведомления.
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE &&
+                ContextCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.ACTIVITY_RECOGNITION
+                ) != PackageManager.PERMISSION_GRANTED
+            ) {
+                return
+            }
             val intent = Intent(context, ActiveWorkoutService::class.java)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 context.startForegroundService(intent)

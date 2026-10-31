@@ -34,6 +34,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -107,8 +108,8 @@ fun WorkoutHistoryScreen(
     }
 
     // Список: сверху первые по дате (старые), ниже — следующие (консистентно по проекту)
-    val visibleEntries = remember(entries, pendingDelete.toMap()) {
-        entries.filter { it.id !in pendingDelete }
+    val visibleEntries by remember(entries) {
+        derivedStateOf { entries.filter { it.id !in pendingDelete } }
     }
     val filteredEntries = remember(visibleEntries, selectedDate) {
         if (selectedDate == null) {

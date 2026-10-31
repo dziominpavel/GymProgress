@@ -3,6 +3,7 @@ package com.example.gymprogress.ui.screens
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -171,6 +172,12 @@ fun SettingsScreen(
         }
         return ok
     }
+
+    // Системный back должен сохранять черновик веса/роста так же, как стрелка в шапке.
+    BackHandler {
+        if (saveAll()) onBack()
+    }
+
     Scaffold(
         modifier = modifier,
         containerColor = MaterialTheme.colorScheme.background,

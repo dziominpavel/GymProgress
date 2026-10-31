@@ -39,9 +39,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.gymprogress.data.ActiveWorkoutUiState
 import com.example.gymprogress.data.FormatUtils
 import com.example.gymprogress.data.SimplifiedScoreCalculator
-import com.example.gymprogress.data.WorkoutRecommendation
+import com.example.gymprogress.ui.navigation.ActiveWorkoutStateSaver
 import com.example.gymprogress.ui.navigation.AppNavigationScaffold
 import com.example.gymprogress.ui.navigation.AppOverlay
 import com.example.gymprogress.ui.navigation.deserializeOverlay
@@ -91,7 +92,9 @@ fun GymProgressApp(viewModel: WorkoutViewModel = viewModel()) {
         mutableStateListOf()
     }
     var showAddDialog by rememberSaveable { mutableStateOf(false) }
-    var activeWorkoutRec by remember { mutableStateOf<WorkoutRecommendation?>(null) }
+    var activeWorkoutState by rememberSaveable(stateSaver = ActiveWorkoutStateSaver) {
+        mutableStateOf<ActiveWorkoutUiState?>(null)
+    }
     var preselectedExerciseForAdd by rememberSaveable { mutableStateOf<String?>(null) }
 
     val topOverlay = overlayStack.lastOrNull()
@@ -191,13 +194,11 @@ fun GymProgressApp(viewModel: WorkoutViewModel = viewModel()) {
         }
     }
 
-    // Подхватываем рекомендацию для активной тренировки. Если рекомендации нет — закрываем экран.
-    LaunchedEffect(topOverlay, workoutRecommendation) {
-        if (topOverlay == AppOverlay.ActiveWorkout) {
-            if (activeWorkoutRec == null && workoutRecommendation != null) {
-                activeWorkoutRec = workoutRecommendation
-            }
-            if (activeWorkoutRec == null) popOverlay()
+    // Активная тренировка хранится в saveable-состоянии и переживает поворот экрана.
+    // Если оверлей восстановлен без сессии — закрываем его.
+    LaunchedEffect(topOverlay, activeWorkoutState) {
+        if (topOverlay == AppOverlay.ActiveWorkout && activeWorkoutState == null) {
+            popOverlay()
         }
     }
 
@@ -209,7 +210,7 @@ fun GymProgressApp(viewModel: WorkoutViewModel = viewModel()) {
                 popOverlay()
             }
             AppOverlay.ActiveWorkout -> {
-                activeWorkoutRec = null
+                activeWorkoutState = null
                 popOverlay()
             }
             AppOverlay.Trainer -> {
@@ -405,18 +406,19 @@ fun GymProgressApp(viewModel: WorkoutViewModel = viewModel()) {
                 modifier = Modifier.fillMaxSize()
             )
             AppOverlay.ActiveWorkout -> {
-                val rec = activeWorkoutRec
-                if (rec != null) {
+                val workout = activeWorkoutState
+                if (workout != null) {
                     ActiveWorkoutScreen(
-                        recommendation = rec,
+                        state = workout,
+                        onStateChange = { activeWorkoutState = it },
                         onFinish = { completedSets ->
                             viewModel.saveCompletedWorkout(completedSets)
-                            activeWorkoutRec = null
+                            activeWorkoutState = null
                             // Завершение тренировки целиком закрывает её и подложку (Trainer).
                             closeAllOverlays()
                         },
                         onCancel = {
-                            activeWorkoutRec = null
+                            activeWorkoutState = null
                             popOverlay()
                         },
                         timerSoundEnabled = timerSoundEnabled,
@@ -434,7 +436,10 @@ fun GymProgressApp(viewModel: WorkoutViewModel = viewModel()) {
                 },
                 onOpenSettings = { pushOverlay(AppOverlay.TrainerSettings) },
                 onStartWorkout = { rec ->
-                    activeWorkoutRec = rec
+                    activeWorkoutState = ActiveWorkoutUiState(
+                        recommendation = rec,
+                        workoutStartTime = System.currentTimeMillis()
+                    )
                     pushOverlay(AppOverlay.ActiveWorkout)
                 },
                 isAiAvailable = viewModel.isAiAvailable,
