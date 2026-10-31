@@ -9,6 +9,7 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import java.time.LocalDate
 
@@ -211,6 +212,88 @@ class SettingsRepository(private val context: Context) {
             prefs[autoDeloadKey] = settings.autoDeload
             prefs[deloadIntervalKey] = settings.deloadIntervalWeeks
             prefs[progressionTypeKey] = settings.progressionType.name
+        }
+    }
+
+    /** Снимок всех настроек для JSON-бэкапа. */
+    suspend fun readSnapshot(): SettingsSnapshot {
+        val prefs = context.dataStore.data.first()
+        val goalName = prefs[goalKey] ?: TrainingGoal.HYPERTROPHY.name
+        val scoringName = prefs[scoringSystemKey] ?: ScoringSystem.SIMPLIFIED.name
+        val chartRangeName = prefs[chartRangeKey] ?: ChartRange.THREE_MONTHS.name
+        val chartMetricName = prefs[chartMetricKey] ?: ChartMetric.E1RM.name
+        val splitName = prefs[splitTypeKey] ?: SplitType.FULL_BODY.name
+        val progressionName = prefs[progressionTypeKey] ?: ProgressionType.DOUBLE.name
+
+        return SettingsSnapshot(
+            trainingGoal = TrainingGoal.entries.find { it.name == goalName } ?: TrainingGoal.HYPERTROPHY,
+            scoringSystem = ScoringSystem.entries.find { it.name == scoringName }
+                ?: ScoringSystem.SIMPLIFIED,
+            bodyWeightKg = prefs[bodyWeightKey]?.toDoubleOrNull()?.takeIf { it > 0.0 },
+            heightCm = prefs[heightCmKey]?.toIntOrNull()?.takeIf { it in 50..300 },
+            gender = prefs[genderKey]?.let { name -> Gender.entries.find { it.name == name } },
+            chartRange = ChartRange.entries.find { it.name == chartRangeName }
+                ?: ChartRange.THREE_MONTHS,
+            chartMetric = ChartMetric.entries.find { it.name == chartMetricName } ?: ChartMetric.E1RM,
+            timerSoundEnabled = prefs[timerSoundKey] ?: true,
+            timerVibrationEnabled = prefs[timerVibrationKey] ?: true,
+            membershipExpiryDate = prefs[membershipExpiryKey]?.let { raw ->
+                runCatching { LocalDate.parse(raw) }.getOrNull()
+            },
+            trainerSettings = TrainerSettings(
+                splitType = SplitType.entries.find { it.name == splitName } ?: SplitType.FULL_BODY,
+                daysPerWeek = prefs[daysPerWeekKey] ?: 3,
+                priorityGroups = (prefs[priorityGroupsKey] ?: "").split(",")
+                    .mapNotNull { name -> MuscleGroup.entries.find { it.name == name } },
+                customSplitDays = parseCustomSplitDays(prefs[customSplitDaysKey] ?: ""),
+                includeWarmup = prefs[includeWarmupKey] ?: true,
+                autoDeload = prefs[autoDeloadKey] ?: true,
+                deloadIntervalWeeks = prefs[deloadIntervalKey] ?: 4,
+                progressionType = ProgressionType.entries.find { it.name == progressionName }
+                    ?: ProgressionType.DOUBLE
+            )
+        )
+    }
+
+    /** Применяет снимок настроек одной записью DataStore. */
+    suspend fun applySnapshot(snapshot: SettingsSnapshot) {
+        context.dataStore.edit { prefs ->
+            prefs[goalKey] = snapshot.trainingGoal.name
+            prefs[scoringSystemKey] = snapshot.scoringSystem.name
+            if (snapshot.bodyWeightKg == null || snapshot.bodyWeightKg <= 0.0) {
+                prefs.remove(bodyWeightKey)
+            } else {
+                prefs[bodyWeightKey] = snapshot.bodyWeightKg.toString()
+            }
+            if (snapshot.heightCm == null || snapshot.heightCm !in 50..300) {
+                prefs.remove(heightCmKey)
+            } else {
+                prefs[heightCmKey] = snapshot.heightCm.toString()
+            }
+            if (snapshot.gender == null) {
+                prefs.remove(genderKey)
+            } else {
+                prefs[genderKey] = snapshot.gender.name
+            }
+            prefs[chartRangeKey] = snapshot.chartRange.name
+            prefs[chartMetricKey] = snapshot.chartMetric.name
+            prefs[timerSoundKey] = snapshot.timerSoundEnabled
+            prefs[timerVibrationKey] = snapshot.timerVibrationEnabled
+            if (snapshot.membershipExpiryDate == null) {
+                prefs.remove(membershipExpiryKey)
+            } else {
+                prefs[membershipExpiryKey] = snapshot.membershipExpiryDate.toString()
+            }
+
+            val trainer = snapshot.trainerSettings
+            prefs[splitTypeKey] = trainer.splitType.name
+            prefs[daysPerWeekKey] = trainer.daysPerWeek
+            prefs[priorityGroupsKey] = trainer.priorityGroups.joinToString(",") { it.name }
+            prefs[customSplitDaysKey] = serializeCustomSplitDays(trainer.customSplitDays)
+            prefs[includeWarmupKey] = trainer.includeWarmup
+            prefs[autoDeloadKey] = trainer.autoDeload
+            prefs[deloadIntervalKey] = trainer.deloadIntervalWeeks
+            prefs[progressionTypeKey] = trainer.progressionType.name
         }
     }
 

@@ -23,9 +23,15 @@ interface WorkoutDao {
     @Delete
     suspend fun delete(entry: WorkoutEntry)
 
+    @Query("DELETE FROM workout_entries")
+    suspend fun deleteAll()
+
     /** Порядок: старые записи первыми (как в AGENTS.md: date ASC, id ASC). */
     @Query("SELECT * FROM workout_entries ORDER BY date ASC, id ASC")
     fun getAllEntries(): Flow<List<WorkoutEntry>>
+
+    @Query("SELECT * FROM workout_entries ORDER BY date ASC, id ASC")
+    suspend fun getAllOnce(): List<WorkoutEntry>
 
     @Query("SELECT * FROM workout_entries WHERE exerciseName = :name ORDER BY date ASC, id ASC")
     fun getEntriesByExercise(name: String): Flow<List<WorkoutEntry>>

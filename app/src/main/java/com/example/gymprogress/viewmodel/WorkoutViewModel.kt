@@ -1,6 +1,7 @@
 package com.example.gymprogress.viewmodel
 
 import android.app.Application
+import android.net.Uri
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -26,6 +27,10 @@ import com.example.gymprogress.data.TrainingGoal
 import com.example.gymprogress.data.WorkoutEntry
 import com.example.gymprogress.data.WorkoutRecommendation
 import com.example.gymprogress.data.WorkoutScoreCalculator
+import com.example.gymprogress.data.backup.BackupException
+import com.example.gymprogress.data.backup.BackupRepository
+import com.example.gymprogress.data.backup.ImportPreview
+import com.example.gymprogress.data.backup.ImportStrategy
 import com.example.gymprogress.service.MembershipReminderScheduler
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -54,6 +59,14 @@ private data class JournalSplitUiState(
     val dayMuscleGroups: List<String>
 )
 
+data class BackupUiState(
+    val preview: ImportPreview? = null,
+    val pendingUri: Uri? = null,
+    val busy: Boolean = false,
+    val message: String? = null,
+    val safetyBackupUri: Uri? = null
+)
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class WorkoutViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -63,6 +76,7 @@ class WorkoutViewModel(application: Application) : AndroidViewModel(application)
     private val settingsRepository = SettingsRepository(application)
     private val trainerEngine = TrainerRecommendationEngine()
     private val aiService = AiService()
+    private val backupRepository = BackupRepository(application, db, settingsRepository)
 
     val isAiAvailable: Boolean get() = aiService.isAvailable()
 
@@ -74,6 +88,9 @@ class WorkoutViewModel(application: Application) : AndroidViewModel(application)
 
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
+
+    private val _backupState = MutableStateFlow(BackupUiState())
+    val backupState: StateFlow<BackupUiState> = _backupState.asStateFlow()
 
     fun clearError() {
         _errorMessage.value = null
@@ -481,6 +498,85 @@ class WorkoutViewModel(application: Application) : AndroidViewModel(application)
     fun updateTrainerSettings(settings: TrainerSettings) {
         safeDb("Не удалось сохранить настройки тренера") {
             settingsRepository.updateTrainerSettings(settings)
+        }
+    }
+
+    fun clearBackupMessage() {
+        _backupState.value = _backupState.value.copy(message = null, safetyBackupUri = null)
+    }
+
+    fun dismissBackupPreview() {
+        _backupState.value = _backupState.value.copy(preview = null, pendingUri = null)
+    }
+
+    fun exportBackupJson(uri: Uri) = launchBackup("Не удалось экспортировать JSON") {
+        val counts = backupRepository.exportJson(uri)
+        _backupState.value = _backupState.value.copy(
+            message = "Экспортировано: ${counts.exercises} упражнений, ${counts.entries} записей"
+        )
+    }
+
+    fun exportBackupCsv(uri: Uri) = launchBackup("Не удалось экспортировать CSV") {
+        val count = backupRepository.exportCsv(uri)
+        _backupState.value = _backupState.value.copy(
+            message = "Экспортировано записей: $count"
+        )
+    }
+
+    fun previewBackup(uri: Uri) = launchBackup("Не удалось прочитать файл") {
+        val preview = backupRepository.readPreview(uri)
+        _backupState.value = _backupState.value.copy(
+            preview = preview,
+            pendingUri = uri,
+            message = null
+        )
+    }
+
+    fun confirmBackupImport(strategy: ImportStrategy, applySettings: Boolean) {
+        val state = _backupState.value
+        val uri = state.pendingUri
+        if (uri == null || state.preview == null) {
+            _errorMessage.value = "Сначала выберите файл для импорта"
+            return
+        }
+        launchBackup("Не удалось импортировать данные") {
+            val result = when (strategy) {
+                ImportStrategy.MERGE -> backupRepository.importMerge(uri, applySettings)
+                ImportStrategy.REPLACE -> backupRepository.importReplace(uri, applySettings)
+            }
+            val message = when (strategy) {
+                ImportStrategy.MERGE ->
+                    "Импорт завершён: добавлено ${result.addedEntries} записей и " +
+                        "${result.addedExercises} упражнений, пропущено ${result.matchedEntries}"
+                ImportStrategy.REPLACE ->
+                    "Данные заменены: ${result.addedEntries} записей, " +
+                        "${result.addedExercises} упражнений"
+            }
+            _backupState.value = _backupState.value.copy(
+                preview = null,
+                pendingUri = null,
+                message = message,
+                safetyBackupUri = result.safetyBackupUri
+            )
+            result.settingsError?.let { _errorMessage.value = it }
+        }
+    }
+
+    private fun launchBackup(errorFallback: String, block: suspend () -> Unit) {
+        if (_backupState.value.busy) return
+        _backupState.value = _backupState.value.copy(busy = true, message = null)
+        viewModelScope.launch {
+            try {
+                block()
+            } catch (e: BackupException) {
+                _errorMessage.value = e.message ?: errorFallback
+                Log.e(TAG, errorFallback, e)
+            } catch (e: Exception) {
+                _errorMessage.value = errorFallback
+                Log.e(TAG, errorFallback, e)
+            } finally {
+                _backupState.value = _backupState.value.copy(busy = false)
+            }
         }
     }
 

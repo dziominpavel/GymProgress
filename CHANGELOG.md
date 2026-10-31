@@ -8,6 +8,8 @@
 **Добавлено**
 - Архивирование упражнений: они скрываются из выбора и рекомендаций, но остаются в истории и статистике.
 - Восстановление упражнений из архива и окончательное удаление с сохранением истории тренировок.
+- Ручной экспорт и импорт JSON: перенос истории, объединение или замена данных.
+- Экспорт журнала в CSV для Excel и Google Sheets.
 
 **Изменено**
 - Переименование упражнения обновляет историю во всех связанных записях.
@@ -17,6 +19,8 @@
 - Справочник упражнений: режим «Архив», действия «В архив», «Восстановить», «Удалить навсегда» (change `exercise-identity-and-archive`).
 - `Exercise.isArchived`, `Exercise.nameKey` с уникальным индексом, `WorkoutEntry.exerciseId` с FK `ON DELETE SET NULL`, `clientId` у упражнений и записей.
 - `MIGRATION_6_7`: Kotlin-нормализация имён, слияние дубликатов, пересборка таблиц; `MigrationTestHelper` и DAO-тесты.
+- Резервное копирование (change `backup-export-import`): JSON `schemaVersion: 1`, стратегии «Объединить» и «Заменить всё», preview, страховочный бэкап, CSV.
+- `kotlinx.serialization`, `FileProvider`, `SettingsRepository.readSnapshot/applySnapshot`, `BackupRepository`/`ImportMerger`, 11 androidTest-сценариев.
 
 ### Изменено
 - Переименование обновляет `exerciseName` связанных записей в одной транзакции; выборка идёт по `exerciseId` с fallback по имени.

@@ -1,8 +1,14 @@
 package com.example.gymprogress.ui.screens
 
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -21,8 +27,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.FileDownload
+import androidx.compose.material.icons.filled.FileUpload
+import androidx.compose.material.icons.filled.TableChart
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -34,12 +45,17 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SelectableDates
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -47,6 +63,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -54,9 +71,12 @@ import com.example.gymprogress.data.FormatUtils
 import com.example.gymprogress.data.Gender
 import com.example.gymprogress.data.ScoringSystem
 import com.example.gymprogress.data.TrainingGoal
+import com.example.gymprogress.data.backup.ImportPreview
+import com.example.gymprogress.data.backup.ImportStrategy
 import com.example.gymprogress.ui.theme.CardShape
 import com.example.gymprogress.ui.theme.Spacing
 import com.example.gymprogress.ui.theme.Volt
+import com.example.gymprogress.viewmodel.BackupUiState
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -73,6 +93,7 @@ fun SettingsScreen(
     timerSoundEnabled: Boolean,
     timerVibrationEnabled: Boolean,
     membershipExpiryDate: LocalDate?,
+    backupState: BackupUiState,
     onGoalChanged: (TrainingGoal) -> Unit,
     onBodyWeightChanged: (Double?) -> Unit,
     onScoringSystemChanged: (ScoringSystem) -> Unit,
@@ -81,9 +102,40 @@ fun SettingsScreen(
     onTimerSoundEnabledChanged: (Boolean) -> Unit,
     onTimerVibrationEnabledChanged: (Boolean) -> Unit,
     onMembershipExpiryDateChanged: (LocalDate?) -> Unit,
+    onExportBackupJson: (Uri) -> Unit,
+    onExportBackupCsv: (Uri) -> Unit,
+    onPreviewBackup: (Uri) -> Unit,
+    onConfirmBackupImport: (ImportStrategy, Boolean) -> Unit,
+    onDismissBackupPreview: () -> Unit,
+    onBackupMessageShown: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
+    val snackbarHostState = remember { SnackbarHostState() }
+    val exportJsonLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json")
+    ) { uri -> uri?.let(onExportBackupJson) }
+    val exportCsvLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("text/csv")
+    ) { uri -> uri?.let(onExportBackupCsv) }
+    val importJsonLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri -> uri?.let(onPreviewBackup) }
+
+    LaunchedEffect(backupState.message, backupState.safetyBackupUri) {
+        val message = backupState.message ?: return@LaunchedEffect
+        val result = snackbarHostState.showSnackbar(
+            message = message,
+            actionLabel = backupState.safetyBackupUri?.let { "Поделиться" },
+            duration = SnackbarDuration.Long
+        )
+        if (result == SnackbarResult.ActionPerformed) {
+            backupState.safetyBackupUri?.let { shareBackup(context, it) }
+        }
+        onBackupMessageShown()
+    }
+
     var bodyWeightText by remember(bodyWeightKg) {
         mutableStateOf(bodyWeightKg?.let { FormatUtils.formatWeight(it) } ?: "")
     }
@@ -121,7 +173,8 @@ fun SettingsScreen(
     }
     Scaffold(
         modifier = modifier,
-        containerColor = MaterialTheme.colorScheme.background
+        containerColor = MaterialTheme.colorScheme.background,
+        snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { innerPadding ->
         val scrollState = rememberScrollState()
         Column(
@@ -517,6 +570,55 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(Spacing.xl))
 
+            Text(
+                text = "Резервное копирование",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Spacer(modifier = Modifier.height(Spacing.xxs))
+            Text(
+                text = "Ручной перенос данных между устройствами. Auto Backup Google работает отдельно.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(Spacing.md))
+
+            val dateSuffix = LocalDate.now().toString().replace("-", "")
+            BackupActionRow(
+                icon = Icons.Default.FileDownload,
+                title = "Экспорт JSON",
+                subtitle = "Все упражнения, записи и настройки",
+                enabled = !backupState.busy,
+                onClick = { exportJsonLauncher.launch("gymprogress_$dateSuffix.json") }
+            )
+            Spacer(modifier = Modifier.height(Spacing.xs))
+            BackupActionRow(
+                icon = Icons.Default.FileUpload,
+                title = "Импорт JSON",
+                subtitle = "Объединить с текущими данными или заменить всё",
+                enabled = !backupState.busy,
+                onClick = { importJsonLauncher.launch(arrayOf("application/json")) }
+            )
+            Spacer(modifier = Modifier.height(Spacing.xs))
+            BackupActionRow(
+                icon = Icons.Default.TableChart,
+                title = "Экспорт журнала в CSV",
+                subtitle = "Для Excel и Google Sheets",
+                enabled = !backupState.busy,
+                onClick = { exportCsvLauncher.launch("gymprogress_journal_$dateSuffix.csv") }
+            )
+            if (backupState.busy) {
+                Spacer(modifier = Modifier.height(Spacing.xs))
+                Text(
+                    text = "Выполняется…",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Volt
+                )
+            }
+
+            Spacer(modifier = Modifier.height(Spacing.xl))
+
             Card(
                 colors = CardDefaults.cardColors(
                     containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
@@ -596,6 +698,209 @@ fun SettingsScreen(
         ) {
             DatePicker(state = datePickerState)
         }
+    }
+
+    backupState.preview?.let { preview ->
+        ImportPreviewDialog(
+            preview = preview,
+            busy = backupState.busy,
+            onMerge = { applySettings -> onConfirmBackupImport(ImportStrategy.MERGE, applySettings) },
+            onReplace = { applySettings -> onConfirmBackupImport(ImportStrategy.REPLACE, applySettings) },
+            onDismiss = onDismissBackupPreview
+        )
+    }
+}
+
+@Composable
+private fun BackupActionRow(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    subtitle: String,
+    enabled: Boolean,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(CardShape)
+            .clickable(enabled = enabled, onClick = onClick),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        shape = CardShape
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = Spacing.md, vertical = Spacing.sm),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = if (enabled) Volt else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(24.dp)
+            )
+            Spacer(modifier = Modifier.width(Spacing.sm))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = if (enabled) {
+                        MaterialTheme.colorScheme.onSurface
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    }
+                )
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ImportPreviewDialog(
+    preview: ImportPreview,
+    busy: Boolean,
+    onMerge: (Boolean) -> Unit,
+    onReplace: (Boolean) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var applySettings by remember { mutableStateOf(false) }
+    var showReplaceConfirmation by remember { mutableStateOf(false) }
+    var replaceConfirmed by remember { mutableStateOf(false) }
+
+    val fileDate = preview.exportedAt.take(10).takeIf { it.length == 10 }
+        ?.let { FormatUtils.formatDate(it) }
+
+    AlertDialog(
+        onDismissRequest = { if (!busy) onDismiss() },
+        title = { Text("Импорт данных") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
+                Text(
+                    "Из файла: ${preview.file.entries} записей, " +
+                        "${preview.file.exercises} упражнений" +
+                        (fileDate?.let { " (от $it)" } ?: "")
+                )
+                Text(
+                    "Сейчас: ${preview.current.entries} записей, " +
+                        "${preview.current.exercises} упражнений"
+                )
+                Spacer(modifier = Modifier.height(Spacing.xxs))
+                Text(
+                    "Объединить: +${preview.merge.addedEntries} записей, " +
+                        "+${preview.merge.addedExercises} упражнений; " +
+                        "совпадёт ${preview.merge.matchedEntries} записей."
+                )
+                Text(
+                    "Заменить всё: ${preview.file.entries} записей и " +
+                        "${preview.file.exercises} упражнений; текущие " +
+                        "${preview.current.entries} записей и " +
+                        "${preview.current.exercises} упражнений удалятся."
+                )
+                if (preview.hasSettings) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.clickable { applySettings = !applySettings }
+                    ) {
+                        Checkbox(
+                            checked = applySettings,
+                            onCheckedChange = { applySettings = it }
+                        )
+                        Text(
+                            "Также применить настройки из файла",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = !busy,
+                onClick = { onMerge(applySettings) }
+            ) {
+                Text("Объединить")
+            }
+        },
+        dismissButton = {
+            Row(horizontalArrangement = Arrangement.spacedBy(Spacing.xs)) {
+                TextButton(
+                    enabled = !busy,
+                    onClick = { onDismiss() }
+                ) {
+                    Text("Отмена")
+                }
+                TextButton(
+                    enabled = !busy,
+                    onClick = { showReplaceConfirmation = true }
+                ) {
+                    Text("Заменить всё", color = MaterialTheme.colorScheme.error)
+                }
+            }
+        }
+    )
+
+    if (showReplaceConfirmation) {
+        AlertDialog(
+            onDismissRequest = { if (!busy) showReplaceConfirmation = false },
+            title = { Text("Заменить все данные?") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
+                    Text(
+                        "Будут удалены ${preview.current.entries} записей и " +
+                            "${preview.current.exercises} упражнений. " +
+                            "Перед заменой автоматически создаётся страховочный бэкап."
+                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.clickable { replaceConfirmed = !replaceConfirmed }
+                    ) {
+                        Checkbox(
+                            checked = replaceConfirmed,
+                            onCheckedChange = { replaceConfirmed = it }
+                        )
+                        Text(
+                            "Я понимаю, что текущие данные будут заменены",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = replaceConfirmed && !busy,
+                    onClick = { onReplace(applySettings) }
+                ) {
+                    Text("Заменить всё", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    enabled = !busy,
+                    onClick = { showReplaceConfirmation = false }
+                ) {
+                    Text("Отмена")
+                }
+            }
+        )
+    }
+}
+
+private fun shareBackup(context: Context, uri: Uri) {
+    runCatching {
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "application/json"
+            putExtra(Intent.EXTRA_STREAM, uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        context.startActivity(Intent.createChooser(intent, "Поделиться бэкапом"))
     }
 }
 

@@ -13,14 +13,23 @@ interface ExerciseDao {
     @Insert
     suspend fun insert(exercise: Exercise)
 
+    @Insert
+    suspend fun insertAll(exercises: List<Exercise>): List<Long>
+
     @Update
     suspend fun update(exercise: Exercise)
 
     @Delete
     suspend fun delete(exercise: Exercise)
 
+    @Query("DELETE FROM exercises")
+    suspend fun deleteAll()
+
     @Query("SELECT * FROM exercises ORDER BY muscleGroup ASC, name ASC")
     fun getAllExercises(): Flow<List<Exercise>>
+
+    @Query("SELECT * FROM exercises ORDER BY muscleGroup ASC, name ASC")
+    suspend fun getAllOnce(): List<Exercise>
 
     @Query("SELECT * FROM exercises WHERE isArchived = 0 ORDER BY muscleGroup ASC, name ASC")
     fun getActiveExercises(): Flow<List<Exercise>>

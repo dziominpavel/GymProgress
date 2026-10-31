@@ -132,6 +132,7 @@ fun GymProgressApp(viewModel: WorkoutViewModel = viewModel()) {
     val timerSoundEnabled by viewModel.timerSoundEnabled.collectAsState()
     val timerVibrationEnabled by viewModel.timerVibrationEnabled.collectAsState()
     val membershipExpiryDate by viewModel.membershipExpiryDate.collectAsState()
+    val backupState by viewModel.backupState.collectAsState()
     val isAnthropometryComplete by viewModel.isAnthropometryComplete.collectAsState()
     val scoringEngine by viewModel.scoringEngine.collectAsState()
     val selectedExerciseType by viewModel.selectedExerciseType.collectAsState()
@@ -373,6 +374,7 @@ fun GymProgressApp(viewModel: WorkoutViewModel = viewModel()) {
                 timerSoundEnabled = timerSoundEnabled,
                 timerVibrationEnabled = timerVibrationEnabled,
                 membershipExpiryDate = membershipExpiryDate,
+                backupState = backupState,
                 onGoalChanged = { viewModel.setTrainingGoal(it) },
                 onBodyWeightChanged = { viewModel.setBodyWeightKg(it) },
                 onScoringSystemChanged = { viewModel.setScoringSystem(it) },
@@ -381,6 +383,14 @@ fun GymProgressApp(viewModel: WorkoutViewModel = viewModel()) {
                 onTimerSoundEnabledChanged = { viewModel.setTimerSoundEnabled(it) },
                 onTimerVibrationEnabledChanged = { viewModel.setTimerVibrationEnabled(it) },
                 onMembershipExpiryDateChanged = { viewModel.setMembershipExpiryDate(it) },
+                onExportBackupJson = { viewModel.exportBackupJson(it) },
+                onExportBackupCsv = { viewModel.exportBackupCsv(it) },
+                onPreviewBackup = { viewModel.previewBackup(it) },
+                onConfirmBackupImport = { strategy, applySettings ->
+                    viewModel.confirmBackupImport(strategy, applySettings)
+                },
+                onDismissBackupPreview = { viewModel.dismissBackupPreview() },
+                onBackupMessageShown = { viewModel.clearBackupMessage() },
                 onBack = { popOverlay() },
                 modifier = Modifier.fillMaxSize()
             )
