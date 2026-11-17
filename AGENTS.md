@@ -50,18 +50,15 @@ Android-приложение на **Kotlin** для учёта силовых т
 - При предложении рефакторинга учитывать `docs/POTENTIAL_ERRORS_ANALYSIS.md` (даты, миграции, целостность данных, дубликаты, обработка ошибок).
 
 ## OpenSpec (spec-driven development)
-Проект инициализирован под OpenSpec. Структура: `openspec/` (`specs/`, `changes/`, `changes/archive/`). Сгенерированные скиллы и slash-команды лежат в:
-- Cursor — `.cursor/skills/openspec-*`, `.cursor/commands/opsx-*.md`;
-- Devin Desktop — `.devin/skills/openspec-*`, `.devin/workflows/opsx-*.md`;
-- OpenCode — `.opencode/skills/openspec-*`, `.opencode/commands/opsx-*.md`.
+Проект инициализирован под OpenSpec. Структура: `openspec/` (`specs/`, `changes/`, `changes/archive/`). Сгенерированные скиллы лежат одним набором в `.agents/skills/` (OpenSpec 2.x); отдельных копий и slash-команд `/opsx-*` больше нет — скилл вызывается по имени (`/openspec-propose` и т. п.).
 
 ### Workflow
-- `/opsx-propose <idea>` — создать change с артефактами (proposal.md, design.md, tasks.md, specs/).
-- `/opsx-apply` — реализовать задачи из текущего change по спеке.
-- `/opsx-archive` — заархивировать завершённый change и обновить основные specs.
-- `/opsx-explore` — исследовать кодовую базу перед предложением.
-- `/opsx-update` — обновить артефакты существующего change.
-- `/opsx-sync` — синхронизировать delta-спеку с основной без архивации.
+- `/openspec-propose <idea>` — создать change с артефактами (proposal.md, design.md, tasks.md, specs/).
+- `/openspec-apply-change` — реализовать задачи из текущего change по спеке.
+- `/openspec-archive-change` — заархивировать завершённый change и обновить основные specs.
+- `/openspec-explore` — исследовать кодовую базу перед предложением.
+- `/openspec-update-change` — обновить артефакты существующего change.
+- `/openspec-sync-specs` — синхронизировать delta-спеку с основной без архивации.
 
 ### Когда использовать
 - Новые фичи и нетривиальные изменения — через OpenSpec (propose → review → apply → archive).
